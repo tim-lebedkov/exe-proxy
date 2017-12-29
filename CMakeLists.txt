@@ -28,7 +28,7 @@ SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -static-libgcc -g -Os" )
 
 include(CheckCXXCompilerFlag)
 
-include(../cmake/Common.cmake)
+include(Common.cmake)
 
 if(MINGW)
   add_definitions(-D_WIN32_WINNT=0x0600)
