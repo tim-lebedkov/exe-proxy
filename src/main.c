@@ -89,6 +89,33 @@ int copyExe(wchar_t **argv)
     return ret;
 }
 
+PROCESS_INFORMATION pinfo;
+
+BOOL WINAPI ctrlHandler(DWORD fdwCtrlType)
+{
+    wprintf(L"ctrlHandler\n");
+    switch (fdwCtrlType) {
+        case CTRL_C_EVENT:
+            GenerateConsoleCtrlEvent(CTRL_C_EVENT, pinfo.dwProcessId);
+            break;
+        case CTRL_CLOSE_EVENT:
+        case CTRL_BREAK_EVENT:
+        case CTRL_LOGOFF_EVENT:
+        case CTRL_SHUTDOWN_EVENT:
+            GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pinfo.dwProcessId);
+            break;
+    }
+
+    WaitForSingleObject(pinfo.hProcess, 1000);
+
+    DWORD ec;
+    if (GetExitCodeProcess(pinfo.hProcess, &ec) && (ec == STILL_ACTIVE)) {
+        TerminateProcess(pinfo.hProcess, 1);
+    }
+
+    return FALSE;
+}
+
 int wmain(int argc, wchar_t **argv)
 {
     int ret = 0;
@@ -178,8 +205,6 @@ int wmain(int argc, wchar_t **argv)
     }
 
     if (!ret) {
-        PROCESS_INFORMATION pinfo;
-
         STARTUPINFOW startupInfo = {
             sizeof(STARTUPINFO), 0, 0, 0,
             (DWORD) CW_USEDEFAULT, (DWORD) CW_USEDEFAULT,
@@ -190,10 +215,13 @@ int wmain(int argc, wchar_t **argv)
                 newExe,
                 cmdLine,
                 0, 0, TRUE,
-                CREATE_UNICODE_ENVIRONMENT, 0,
+                CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_PROCESS_GROUP, 0,
                 0, &startupInfo, &pinfo);
 
+
         if (success) {
+            SetConsoleCtrlHandler(ctrlHandler, TRUE);
+
             WaitForSingleObject(pinfo.hProcess, INFINITE);
             DWORD ec;
             if (GetExitCodeProcess(pinfo.hProcess, &ec))
