@@ -26,13 +26,18 @@ reside in the same directory as the EXE Proxy itself.
 In order to change the target executable resource entry you could start the EXE
 Proxy with the parameter "exe-proxy-copy":
 
-exeproxy.exe exeproxy-copy <output file name> <target executable name>
+exeproxy.exe exeproxy-copy <output file name> <target executable name> [--copy-icons] [--copy-version]
 
 The second parameter should be the name of the output exe file where a copy of
 the EXE Proxy will be stored. The third parameter should either contain an
 absolute path to the target executable or the name of the target executable 
 without slashes or backslashes if the target executable resides in the same
 directory as the EXE Proxy.
+
+If the parameter --copy-icons is present, all icons and icon groups are copied
+making the executable icon look exactly as in the target executable.
+
+If the parameter --copy-version is present, the version information is copied.
 
 EXE Proxy uses semantic versioning (http://semver.org/). The versions before
 1.0 will change the interface incompatibly so please use an exact version 

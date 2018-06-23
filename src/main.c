@@ -1,8 +1,11 @@
 #include <stdio.h>
 #include <windows.h>
 #include <string.h>
+#include <stdbool.h>
 
 #define ERROR_EXIT_CODE 20000
+
+#define TARGET_EXE_RESOURCE 1
 
 /**
  * @brief full path to the current exe file
@@ -25,7 +28,99 @@ wchar_t* getExePath()
     return exe;
 }
 
-int copyExe(wchar_t **argv)
+typedef struct {
+    HANDLE hUpdateRes;
+} EnumResourcesData;
+
+WINBOOL CALLBACK enumResources(HMODULE hModule, LPCWSTR lpType, LPWSTR lpName,
+        LONG_PTR lParam)
+{
+    EnumResourcesData* data = (EnumResourcesData*) lParam;
+
+    HRSRC hRes = FindResource(hModule, lpName, lpType);
+
+    HRSRC hResLoad = NULL;
+    if (hRes != NULL) {
+        //wprintf(L"Loading the icon resource\n");
+
+        // Load the ICON into global memory.
+        hResLoad = (HRSRC)LoadResource(hModule, hRes);
+    }
+
+    // pointer to resource data
+    char *lpResLock = 0;
+    if (hResLoad != NULL) {
+        //wprintf(L"Locking the icon resource\n");
+
+        // Lock the ICON into global memory.
+        lpResLock = (char*)LockResource(hResLoad);
+    }
+
+    if (lpResLock) {
+        //wprintf(L"Updating the icon resource\n");
+
+        UpdateResource(data->hUpdateRes,
+                lpType,
+                lpName,
+                MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US),
+                lpResLock,
+                SizeofResource(hModule, hRes));
+    }
+
+    return TRUE;
+}
+
+void printError(DWORD err) {
+    wprintf(L"Error %d\n", err);
+}
+
+/**
+ * @brief copies the icon from one file to another
+ *
+ * @param hUpdateRes result of BeginUpdateResource
+ * @param lpszSourceFile file with the icon
+ * @param copyIcon should the icons and icon groups be copied
+ * @param copyVersion should the version information be copied
+ */
+void copyResources(HANDLE hUpdateRes, LPCWSTR lpszSourceFile, bool copyIcon,
+        bool copyVersion)
+{
+    //wprintf(L"Copying the icon\n");
+    //wprintf(lpszSourceFile);
+
+    // Load the source exe from where we need the icon
+    HMODULE hSrcExe = LoadLibraryEx(lpszSourceFile, NULL,
+            LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+
+    DWORD err = GetLastError();
+    if (err) {
+        printError(err);
+    }
+
+    if (hSrcExe != NULL) {
+        // wprintf(L"Searching for the icon\n");
+
+        EnumResourcesData data = {0};
+        data.hUpdateRes = hUpdateRes;
+
+        if (copyIcon) {
+            EnumResourceNames(hSrcExe, MAKEINTRESOURCE(RT_ICON), enumResources,
+                    (LONG_PTR) &data);
+            EnumResourceNames(hSrcExe, MAKEINTRESOURCE(RT_GROUP_ICON),
+                    enumResources, (LONG_PTR) &data);
+        }
+        if (copyVersion) {
+            EnumResourceNames(hSrcExe, MAKEINTRESOURCE(RT_VERSION),
+                    enumResources, (LONG_PTR) &data);
+        }
+    }
+
+    if (hSrcExe != NULL) {
+        FreeLibrary(hSrcExe);
+    }
+}
+
+int copyExe(wchar_t* exeProxy, wchar_t* target, bool copyIcon, bool copyVersion)
 {
     int ret = 0;
 
@@ -36,7 +131,7 @@ int copyExe(wchar_t **argv)
     }
 
     if (!ret) {
-        if (!CopyFile(exe, argv[2], TRUE)) {
+        if (!CopyFile(exe, exeProxy, TRUE)) {
             ret = ERROR_EXIT_CODE;
             wprintf(L"Copying the executable failed\n");
         }
@@ -46,36 +141,37 @@ int copyExe(wchar_t **argv)
 
     HANDLE hUpdateRes = 0;
     if (!ret) {
-        hUpdateRes = BeginUpdateResource(argv[2], TRUE);
+        hUpdateRes = BeginUpdateResource(exeProxy, TRUE);
         if (!hUpdateRes) {
             ret = ERROR_EXIT_CODE;
             wprintf(L"BeginUpdateResource failed\n");
         }
     }
 
-    // copy the icon from the target executable
+    // set the path to the target .exe file in the resource string
     if (!ret) {
-        // http://www.codeproject.com/Articles/30644/Replacing-ICON-resources-in-EXE-and-DLL-files
-    }
-
-    // set the path to the target .exe file in the resource string 1
-    if (!ret) {
-        size_t targetLen = wcslen(argv[3]);
+        // Resource strings are stored in groups of 16.
+        // Each string is preceeded by its size.
+        size_t targetLen = wcslen(target);
         size_t bufSize = (targetLen + 16) * sizeof(wchar_t);
         wchar_t* buf = malloc(bufSize);
         memset(buf, 0, bufSize);
         buf[1] = targetLen;
-        wcscpy(buf + 2, argv[3]);
+        wcscpy(buf + 2, target);
 
         if (!UpdateResource(hUpdateRes,
                 RT_STRING,
-                MAKEINTRESOURCE(1),
+                MAKEINTRESOURCE(TARGET_EXE_RESOURCE),
                 MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL),
                 buf,
                 bufSize)) {
             ret = ERROR_EXIT_CODE;
             wprintf(L"UpdateResource failed\n");
         }
+    }
+
+    if (!ret) {
+        copyResources(hUpdateRes, target, copyIcon, copyVersion);
     }
 
     if (!ret) {
@@ -120,8 +216,16 @@ int wmain(int argc, wchar_t **argv)
 {
     int ret = 0;
 
-    if (argc == 4 && wcscmp(argv[1], L"exeproxy-copy") == 0) {
-        ret = copyExe(argv);
+    if (argc >= 4 && wcscmp(argv[1], L"exeproxy-copy") == 0) {
+        bool copyIcon = false;
+        bool copyVersion = false;
+        for (int i = 4; i < argc; i++) {
+            if (wcscmp(argv[i], L"--copy-icons") == 0)
+                copyIcon = true;
+            else if (wcscmp(argv[i], L"--copy-version") == 0)
+                copyVersion = true;
+        }
+        ret = copyExe(argv[2], argv[3], copyIcon, copyVersion);
         return ret;
     }
 
@@ -158,7 +262,8 @@ int wmain(int argc, wchar_t **argv)
     wchar_t* target = 0;
     if (!ret) {
         target = malloc(MAX_PATH * sizeof(TCHAR));
-        if (LoadString(0, 1, target, MAX_PATH) == 0) {
+        if (LoadString(0, (TARGET_EXE_RESOURCE - 1) * 16 + 1,
+                target, MAX_PATH) == 0) {
             ret = ERROR_EXIT_CODE;
             wprintf(L"Cannot load the target executable path from the resource\n");
         }
