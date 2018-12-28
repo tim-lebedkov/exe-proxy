@@ -81,9 +81,10 @@ void printError(DWORD err) {
  * @param lpszSourceFile file with the icon
  * @param copyIcon should the icons and icon groups be copied
  * @param copyVersion should the version information be copied
+ * @param copyManifest should the executable manifest be copied
  */
 void copyResources(HANDLE hUpdateRes, LPCWSTR lpszSourceFile, bool copyIcon,
-        bool copyVersion)
+        bool copyVersion, bool copyManifest)
 {
     //wprintf(L"Copying the icon\n");
     //wprintf(lpszSourceFile);
@@ -113,6 +114,10 @@ void copyResources(HANDLE hUpdateRes, LPCWSTR lpszSourceFile, bool copyIcon,
             EnumResourceNames(hSrcExe, MAKEINTRESOURCE(RT_VERSION),
                     enumResources, (LONG_PTR) &data);
         }
+        if (copyManifest) {
+            EnumResourceNames(hSrcExe, MAKEINTRESOURCE(RT_MANIFEST),
+                    enumResources, (LONG_PTR) &data);
+        }
     }
 
     if (hSrcExe != NULL) {
@@ -120,7 +125,8 @@ void copyResources(HANDLE hUpdateRes, LPCWSTR lpszSourceFile, bool copyIcon,
     }
 }
 
-int copyExe(wchar_t* exeProxy, wchar_t* target, bool copyIcon, bool copyVersion)
+int copyExe(wchar_t* exeProxy, wchar_t* target, bool copyIcon,
+        bool copyVersion, bool copyManifest)
 {
     int ret = 0;
 
@@ -171,7 +177,7 @@ int copyExe(wchar_t* exeProxy, wchar_t* target, bool copyIcon, bool copyVersion)
     }
 
     if (!ret) {
-        copyResources(hUpdateRes, target, copyIcon, copyVersion);
+        copyResources(hUpdateRes, target, copyIcon, copyVersion, copyManifest);
     }
 
     if (!ret) {
@@ -219,13 +225,16 @@ int wmain(int argc, wchar_t **argv)
     if (argc >= 4 && wcscmp(argv[1], L"exeproxy-copy") == 0) {
         bool copyIcon = false;
         bool copyVersion = false;
+        bool copyManifest = false;
         for (int i = 4; i < argc; i++) {
             if (wcscmp(argv[i], L"--copy-icons") == 0)
                 copyIcon = true;
             else if (wcscmp(argv[i], L"--copy-version") == 0)
                 copyVersion = true;
+            else if (wcscmp(argv[i], L"--copy-manifest") == 0)
+                copyManifest = true;
         }
-        ret = copyExe(argv[2], argv[3], copyIcon, copyVersion);
+        ret = copyExe(argv[2], argv[3], copyIcon, copyVersion, copyManifest);
         return ret;
     }
 
