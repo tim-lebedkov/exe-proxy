@@ -244,11 +244,16 @@ static duk_ret_t native_adder(duk_context *ctx)
 
 /**
  * @brief executes JavaScript
- * @param js JavaScript
- * @return 0 = error, <> 0 = no error
+ * @param js JavaScript as UTF-8
+ * @param executable path to this executable as UTF-8
+ * @param targetExecutable path to the target executable as UTF-8
+ * @return error code or 0
  */
-static int executeJS(char* js)
+static int executeJS(char* js, char* executable, char* targetExecutable)
 {
+    wprintf(L"executeJS()");
+    int ret = 0;
+
     duk_context *ctx = duk_create_heap_default();
 
     duk_push_c_function(ctx, native_print, DUK_VARARGS);
@@ -256,49 +261,85 @@ static int executeJS(char* js)
     duk_push_c_function(ctx, native_adder, DUK_VARARGS);
     duk_put_global_string(ctx, "adder");
 
-    duk_eval_string(ctx, js);
+    // system object
+    duk_push_object(ctx);  /* push object which will become "system" */
+    duk_push_c_function(ctx, native_adder, DUK_VARARGS);  /* Stack afterwards: [ ... "system" native_adder ] */
+    duk_put_prop_string(ctx, -2, "adder");  /* Util.adder = native_adder function */
 
-    duk_eval_string(ctx, "print('2+3=' + adder(2, 3));");
+    duk_push_string(ctx, "targetExecutable");
+    duk_push_string(ctx, targetExecutable);
+    duk_put_prop(ctx, -3);
+
+    duk_push_string(ctx, "executable");
+    duk_push_string(ctx, executable);
+    duk_put_prop(ctx, -3);
+
+    duk_put_global_string(ctx, "system");  /* set "process" into the global object */
+
+    duk_int_t rc = duk_peval_string(ctx, js);
+    if (rc != 0) {
+        printf("JavaScript evaluation failed: %s\n", duk_safe_to_string(ctx, -1));
+        ret = 1;
+    }
+
     duk_pop(ctx);  /* pop eval result */
 
     duk_destroy_heap(ctx);
 
-    return 1;
+    return ret;
+}
+
+/**
+ * @brief converts a string to UTF-8
+ * @param s UTF-16
+ * @return new UTF-8 string
+ */
+static char* toUTF8(wchar_t* s)
+{
+    int n = wcslen(s);
+
+    int sz = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS | WC_NO_BEST_FIT_CHARS, s, n, NULL, 0, NULL, NULL);
+    char* r = malloc(sz);
+    sz = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS | WC_NO_BEST_FIT_CHARS, s, n, r, sz, NULL, NULL);
+    *(r + sz) = 0;
+
+    return r;
 }
 
 /**
  * @brief reads "<executable name>.js"
  * @param js the source as UTF-8 will be stored here
- * @return 0 = error, <> 0 = no error
+ * @return error code or 0
  */
 static int readJS(char** js)
 {
+    wprintf(L"readJS()");
     *js = 0;
 
-    int ret = 1;
+    int ret = 0;
 
     // TODO: file name
     HANDLE f = CreateFile(L"exeproxy.js", GENERIC_READ,
             FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (f == INVALID_HANDLE_VALUE) {
-        ret = 0;
+        ret = 1;
         printError(GetLastError());
     }
 
-    if (ret) {
+    if (!ret) {
         // TODO: read the whole file
         *js = malloc(1001);
 
         DWORD read;
         if (!ReadFile(f, *js, 1000, &read, NULL)) {
-            ret = 0;
+            ret = 1;
             printError(GetLastError());
         } else {
             *(*js + read) = 0;
         }
     }
 
-    if (!ret) {
+    if (ret) {
         free(*js);
         *js = 0;
     }
@@ -309,23 +350,54 @@ static int readJS(char** js)
     return ret;
 }
 
-
-int wmain(int argc, wchar_t **argv)
+/**
+ * @brief executes a program
+ * @param newExe executable
+ * @param cmdLine command line
+ * @return exit code
+ */
+static int exec(wchar_t* newExe, wchar_t* cmdLine)
 {
     int ret = 0;
 
-    // TODO: allow missing .js file
+    STARTUPINFOW startupInfo = {
+        sizeof(STARTUPINFO), 0, 0, 0,
+        (DWORD) CW_USEDEFAULT, (DWORD) CW_USEDEFAULT,
+        (DWORD) CW_USEDEFAULT, (DWORD) CW_USEDEFAULT,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    };
+    WINBOOL success = CreateProcess(
+            newExe,
+            cmdLine,
+            0, 0, TRUE,
+            CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_PROCESS_GROUP, 0,
+            0, &startupInfo, &pinfo);
 
-    char* js = 0;
-    if (!readJS(&js)) {
-        ret = 1;
+
+    if (success) {
+        SetConsoleCtrlHandler(ctrlHandler, TRUE);
+
+        WaitForSingleObject(pinfo.hProcess, INFINITE);
+        DWORD ec;
+        if (GetExitCodeProcess(pinfo.hProcess, &ec))
+            ret = ec;
+        else
+            ret = ERROR_EXIT_CODE;
+        CloseHandle(pinfo.hThread);
+        CloseHandle(pinfo.hProcess);
+    } else {
+        wprintf(L"Error starting %ls %ls\n", newExe, cmdLine);
+        ret = ERROR_EXIT_CODE;
     }
 
-    if (!ret) {
-        if (!executeJS(js)) {
-            ret = 1;
-        }
-    }
+    return ret;
+}
+
+int wmain(int argc, wchar_t **argv)
+{
+    wprintf(L"main()");
+
+    int ret = 0;
 
     if (argc >= 4 && wcscmp(argv[1], L"exeproxy-copy") == 0) {
         bool copyIcon = false;
@@ -423,43 +495,33 @@ int wmain(int argc, wchar_t **argv)
         }
     }
 
+    // TODO: allow missing .js file
     if (!ret) {
-        STARTUPINFOW startupInfo = {
-            sizeof(STARTUPINFO), 0, 0, 0,
-            (DWORD) CW_USEDEFAULT, (DWORD) CW_USEDEFAULT,
-            (DWORD) CW_USEDEFAULT, (DWORD) CW_USEDEFAULT,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-        };
-        WINBOOL success = CreateProcess(
-                newExe,
-                cmdLine,
-                0, 0, TRUE,
-                CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_PROCESS_GROUP, 0,
-                0, &startupInfo, &pinfo);
-
-
-        if (success) {
-            SetConsoleCtrlHandler(ctrlHandler, TRUE);
-
-            WaitForSingleObject(pinfo.hProcess, INFINITE);
-            DWORD ec;
-            if (GetExitCodeProcess(pinfo.hProcess, &ec))
-                ret = ec;
-            else
-                ret = ERROR_EXIT_CODE;
-            CloseHandle(pinfo.hThread);
-            CloseHandle(pinfo.hProcess);
-        } else {
-            wprintf(L"Error starting %ls %ls\n", newExe, args);
-            ret = ERROR_EXIT_CODE;
+        char* js = 0;
+        if (readJS(&js) != 0) {
+            ret = 1;
         }
+
+        if (!ret) {
+            char* exeUTF8 = toUTF8(exe);
+            char* newExeUTF8 = toUTF8(newExe);
+            if (executeJS(js, exeUTF8, newExeUTF8) != 0) {
+                ret = 1;
+            }
+            free(newExeUTF8);
+            free(exeUTF8);
+        }
+        free(js);
+    }
+
+    if (!ret) {
+        ret = exec(newExe, cmdLine);
     }
     
     free(cmdLine);
     free(exe);
     free(newExe);
     free(args);
-    free(js);
 
     return ret;
 }
