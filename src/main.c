@@ -314,6 +314,19 @@ static duk_ret_t native_exit(duk_context *ctx)
     exit(ec);
 }
 
+static duk_ret_t native_totalmem(duk_context *ctx)
+{
+    MEMORYSTATUSEX statex;
+
+    statex.dwLength = sizeof(statex);
+
+    GlobalMemoryStatusEx(&statex);
+
+    duk_push_number(ctx, statex.ullTotalPhys);
+
+    return 1;
+}
+
 /**
  * @brief executes JavaScript
  * @param js JavaScript as UTF-8
@@ -358,6 +371,16 @@ static int executeJS(char* js, char* executable, char* targetExecutable)
         duk_put_prop_string(ctx, -2, "execSync");
 
         duk_put_global_string(ctx, "child_process");
+    }
+
+    {
+        // os
+        duk_push_object(ctx);
+
+        duk_push_c_function(ctx, native_totalmem, 0);
+        duk_put_prop_string(ctx, -2, "totalmem");
+
+        duk_put_global_string(ctx, "os");
     }
 
     duk_int_t rc = duk_peval_string(ctx, js);
@@ -559,7 +582,7 @@ int wmain(int argc, wchar_t **argv)
         int len = wcslen(javaScript);
         if (len > 4 && *(javaScript + len - 4) == '.' && *(javaScript + len - 3) == 'e' &&
                 *(javaScript + len - 2) == 'x' && *(javaScript + len - 1) == 'e') {
-            wchar_t* p = javaScript + wcslen(javaScript) - 3;
+            wchar_t* p = javaScript + len - 3;
             *p = 'j';
             p++;
             *p = 's';
