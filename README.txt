@@ -1,21 +1,28 @@
 EXE Proxy
 =========
 
-This program serves as a proxy for another command line program. All the
-arguments will be passed as-is to the target program. The return code of the
-target program will be returned as exit code by EXE Proxy.
+This program serves as a proxy for another command line program. There 
+are two versions of the program available:
+ - simple (20 KB binary)
+ - with JavaScript (270 KB binary)
 
-EXE Proxy can be used to enable access to a command line program under another
-(possibly shorter) name. Another usage could be to store many copies of EXE 
-proxy in one directory pointing to command line utilities on the computer and
-adding only this directory to the PATH environment variable. This would avoid 
-reaching the maximum length for PATH (2048 characters) and making it very
-complicated while still be able to run all programs without specifying the 
-directory where they reside. EXE Proxy could also be useful in making a GUI
-executable usable from the command line. Normally cmd.exe does not wait for
-GUI executables to end but returns immediately. EXE Proxy does not differentiate
-between GUI and non-GUI programs and always waits for the target process to end. 
+Usage scenarios:
+ - enable access to a command line program under another (possibly shorter) name. 
+ - store many copies of EXE proxy in one directory pointing to command line 
+	utilities on the computer and
+	adding only this directory to the PATH environment variable. This would avoid 
+	reaching the maximum length for PATH (2048 characters) and making it very
+	complicated while still be able to run all programs without specifying the 
+	directory where they reside. 
+ - make a GUI executable usable from the command line too. 
+	Normally cmd.exe does not wait for
+	GUI executables to end but returns immediately. EXE Proxy does not differentiate
+	between GUI and non-GUI programs and always waits for the target process to end. 
+ - launcher for Java or other programming languages that do not create executables
+	by default.
 
+1. The simple version passes all arguments as-is to the target program. 
+The return code of the target program will be returned as exit code by EXE Proxy.
 The path and file name of the target executable are
 stored directly as a resource in a copy of the EXE Proxy. During the start
 EXE Proxy reads the resource string and uses it to find the target executable.
@@ -39,7 +46,11 @@ making the executable icon look exactly as in the target executable.
 
 If the parameter --copy-version is present, the version information is copied.
 
-EXE Proxy uses semantic versioning (http://semver.org/). The versions before
+2. The version with JavaScript reads the JavaScript file the same name as
+the executable and the extension .js and executes it using the Duktape library
+(https://duktape.org/).
+
+3. EXE Proxy uses semantic versioning (http://semver.org/). The versions before
 1.0 will change the interface incompatibly so please use an exact version 
 number as dependency.
 
