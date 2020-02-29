@@ -1,5 +1,4 @@
-EXE Proxy
-=========
+# EXE Proxy
 
 This program serves as a proxy for another command line program. There 
 are two versions of the program available:
@@ -48,7 +47,23 @@ If the parameter --copy-version is present, the version information is copied.
 
 2. The version with JavaScript reads the JavaScript file the same name as
 the executable and the extension .js and executes it using the Duktape library
-(https://duktape.org/).
+(https://duktape.org/). In the JavaScript code are also defined:
+  * os.totalmem() - total physical system memory in bytes
+  * process.argv0 - executable name including path
+  * child_process.execSync(command) - executes a program and returns the exit code
+  * process.exit(ec) - exits the program with the specified exit code  
+
+Example JavaScript file:
+
+```JavaScript
+console.log('os.totalmem = ' + os.totalmem());
+console.log('exe = ' + process.argv0);
+
+var ec = child_process.execSync("C:\\msys64\\mingw32\\bin\\addr2line.exe params");
+console.log('exit code = ' + ec);
+
+process.exit(200);
+```
 
 3. EXE Proxy uses semantic versioning (http://semver.org/). The versions before
 1.0 will change the interface incompatibly so please use an exact version 
