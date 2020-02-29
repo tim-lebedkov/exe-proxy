@@ -332,24 +332,33 @@ static int executeJS(char* js, char* executable, char* targetExecutable)
     duk_push_c_function(ctx, native_print, DUK_VARARGS);
     duk_put_global_string(ctx, "print");
 
-    // system object
-    duk_push_object(ctx);  /* push object which will become "system" */
+    {
+        // process
+        duk_push_object(ctx);  /* push object which will become "process" */
 
-    duk_push_c_function(ctx, native_execSync, 2);
-    duk_put_prop_string(ctx, -2, "execSync");
+        duk_push_c_function(ctx, native_exit, 1);
+        duk_put_prop_string(ctx, -2, "exit");
 
-    duk_push_c_function(ctx, native_exit, 1);
-    duk_put_prop_string(ctx, -2, "exit");
+        duk_push_string(ctx, "targetExecutable");
+        duk_push_string(ctx, targetExecutable);
+        duk_put_prop(ctx, -3);
 
-    duk_push_string(ctx, "targetExecutable");
-    duk_push_string(ctx, targetExecutable);
-    duk_put_prop(ctx, -3);
+        duk_push_string(ctx, "argv0");
+        duk_push_string(ctx, executable);
+        duk_put_prop(ctx, -3);
 
-    duk_push_string(ctx, "argv0");
-    duk_push_string(ctx, executable);
-    duk_put_prop(ctx, -3);
+        duk_put_global_string(ctx, "process");  /* set "process" into the global object */
+    }
 
-    duk_put_global_string(ctx, "process");  /* set "process" into the global object */
+    {
+        // child_process
+        duk_push_object(ctx);
+
+        duk_push_c_function(ctx, native_execSync, 2);
+        duk_put_prop_string(ctx, -2, "execSync");
+
+        duk_put_global_string(ctx, "child_process");
+    }
 
     duk_int_t rc = duk_peval_string(ctx, js);
     if (rc != 0) {
