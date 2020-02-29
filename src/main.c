@@ -9,6 +9,23 @@
 #define TARGET_EXE_RESOURCE 1
 
 /**
+ * @brief converts a string to UTF-16
+ * @param s UTF-8
+ * @return new UTF-16 string
+ */
+static wchar_t* toUTF16(const char* s)
+{
+    int n = strlen(s);
+
+    int sz = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, s, n, NULL, 0);
+    wchar_t* r = malloc(sz * sizeof(wchar_t));
+    sz = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, s, n, r, sz);
+    *(r + sz) = 0;
+
+    return r;
+}
+
+/**
  * @brief full path to the current exe file
  * @return path that must be freed later or 0 if an error occures
  */
@@ -219,6 +236,50 @@ BOOL WINAPI ctrlHandler(DWORD fdwCtrlType)
     return FALSE;
 }
 
+/**
+ * @brief executes a program
+ * @param newExe executable
+ * @param cmdLine command line
+ * @return exit code
+ */
+static int exec(wchar_t* newExe, wchar_t* cmdLine)
+{
+    int ret = 0;
+
+    STARTUPINFOW startupInfo = {
+        sizeof(STARTUPINFO), 0, 0, 0,
+        (DWORD) CW_USEDEFAULT, (DWORD) CW_USEDEFAULT,
+        (DWORD) CW_USEDEFAULT, (DWORD) CW_USEDEFAULT,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    };
+    WINBOOL success = CreateProcess(
+            newExe,
+            cmdLine,
+            0, 0, TRUE,
+            CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_PROCESS_GROUP, 0,
+            0, &startupInfo, &pinfo);
+
+
+    if (success) {
+        SetConsoleCtrlHandler(ctrlHandler, TRUE);
+
+        WaitForSingleObject(pinfo.hProcess, INFINITE);
+        DWORD ec;
+        if (GetExitCodeProcess(pinfo.hProcess, &ec))
+            ret = ec;
+        else
+            ret = ERROR_EXIT_CODE;
+        CloseHandle(pinfo.hThread);
+        CloseHandle(pinfo.hProcess);
+    } else {
+        wprintf(L"Error starting %ls %ls\n", newExe, cmdLine);
+        ret = ERROR_EXIT_CODE;
+    }
+
+    return ret;
+}
+
+
 static duk_ret_t native_print(duk_context *ctx)
 {
     duk_push_string(ctx, " ");
@@ -239,6 +300,24 @@ static duk_ret_t native_adder(duk_context *ctx)
     }
 
     duk_push_number(ctx, res);
+    return 1;  /* one return value */
+}
+
+static duk_ret_t native_execSync(duk_context *ctx)
+{
+    const char* exe = duk_safe_to_string(ctx, 0);
+    const char* cmdLine = duk_safe_to_string(ctx, 1);
+
+    wchar_t* wexe = toUTF16(exe);
+    wchar_t* wcmdLine = toUTF16(cmdLine);
+
+    int ec = exec(wexe, wcmdLine);
+
+    free(wexe);
+    free(wcmdLine);
+
+    duk_push_number(ctx, ec);
+
     return 1;  /* one return value */
 }
 
@@ -263,8 +342,12 @@ static int executeJS(char* js, char* executable, char* targetExecutable)
 
     // system object
     duk_push_object(ctx);  /* push object which will become "system" */
+
     duk_push_c_function(ctx, native_adder, DUK_VARARGS);  /* Stack afterwards: [ ... "system" native_adder ] */
-    duk_put_prop_string(ctx, -2, "adder");  /* Util.adder = native_adder function */
+    duk_put_prop_string(ctx, -2, "adder");  /* system.adder = native_adder function */
+
+    duk_push_c_function(ctx, native_execSync, 2);
+    duk_put_prop_string(ctx, -2, "execSync");
 
     duk_push_string(ctx, "targetExecutable");
     duk_push_string(ctx, targetExecutable);
@@ -350,49 +433,6 @@ static int readJS(char** js)
     return ret;
 }
 
-/**
- * @brief executes a program
- * @param newExe executable
- * @param cmdLine command line
- * @return exit code
- */
-static int exec(wchar_t* newExe, wchar_t* cmdLine)
-{
-    int ret = 0;
-
-    STARTUPINFOW startupInfo = {
-        sizeof(STARTUPINFO), 0, 0, 0,
-        (DWORD) CW_USEDEFAULT, (DWORD) CW_USEDEFAULT,
-        (DWORD) CW_USEDEFAULT, (DWORD) CW_USEDEFAULT,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-    };
-    WINBOOL success = CreateProcess(
-            newExe,
-            cmdLine,
-            0, 0, TRUE,
-            CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_PROCESS_GROUP, 0,
-            0, &startupInfo, &pinfo);
-
-
-    if (success) {
-        SetConsoleCtrlHandler(ctrlHandler, TRUE);
-
-        WaitForSingleObject(pinfo.hProcess, INFINITE);
-        DWORD ec;
-        if (GetExitCodeProcess(pinfo.hProcess, &ec))
-            ret = ec;
-        else
-            ret = ERROR_EXIT_CODE;
-        CloseHandle(pinfo.hThread);
-        CloseHandle(pinfo.hProcess);
-    } else {
-        wprintf(L"Error starting %ls %ls\n", newExe, cmdLine);
-        ret = ERROR_EXIT_CODE;
-    }
-
-    return ret;
-}
-
 int wmain(int argc, wchar_t **argv)
 {
     wprintf(L"main()");
@@ -446,6 +486,9 @@ int wmain(int argc, wchar_t **argv)
     }
 
     wchar_t* target = 0;
+
+    target = wcsdup(L"C:\\msys64\\mingw32\\bin\\addr2line.exe");
+    /* TODO
     if (!ret) {
         target = malloc(MAX_PATH * sizeof(TCHAR));
         if (LoadString(0, (TARGET_EXE_RESOURCE - 1) * 16 + 1,
@@ -454,6 +497,7 @@ int wmain(int argc, wchar_t **argv)
             wprintf(L"Cannot load the target executable path from the resource\n");
         }
     }
+    */
 
     // find the name of the target executable
     wchar_t* newExe = 0;
@@ -506,7 +550,7 @@ int wmain(int argc, wchar_t **argv)
             char* exeUTF8 = toUTF8(exe);
             char* newExeUTF8 = toUTF8(newExe);
             if (executeJS(js, exeUTF8, newExeUTF8) != 0) {
-                ret = 1;
+                ret = ERROR_EXIT_CODE;
             }
             free(newExeUTF8);
             free(exeUTF8);
