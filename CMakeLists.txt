@@ -82,8 +82,11 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 set(EXEPROXY_SOURCES
     src/main.c
+    src/duktape.c
 )
 set(EXEPROXY_HEADERS
+    src/duk_config.h
+    src/duktape.h
 )
 
 set(OUTPUT_FILE_NAME "exeproxy.exe")

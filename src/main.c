@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <string.h>
 #include <stdbool.h>
+#include "duktape.h"
 
 #define ERROR_EXIT_CODE 20000
 
@@ -218,9 +219,113 @@ BOOL WINAPI ctrlHandler(DWORD fdwCtrlType)
     return FALSE;
 }
 
+static duk_ret_t native_print(duk_context *ctx)
+{
+    duk_push_string(ctx, " ");
+    duk_insert(ctx, 0);
+    duk_join(ctx, duk_get_top(ctx) - 1);
+    printf("%s\n", duk_safe_to_string(ctx, -1));
+    return 0;
+}
+
+static duk_ret_t native_adder(duk_context *ctx)
+{
+    int i;
+    int n = duk_get_top(ctx);  /* #args */
+    double res = 0.0;
+
+    for (i = 0; i < n; i++) {
+        res += duk_to_number(ctx, i);
+    }
+
+    duk_push_number(ctx, res);
+    return 1;  /* one return value */
+}
+
+/**
+ * @brief executes JavaScript
+ * @param js JavaScript
+ * @return 0 = error, <> 0 = no error
+ */
+static int executeJS(char* js)
+{
+    duk_context *ctx = duk_create_heap_default();
+
+    duk_push_c_function(ctx, native_print, DUK_VARARGS);
+    duk_put_global_string(ctx, "print");
+    duk_push_c_function(ctx, native_adder, DUK_VARARGS);
+    duk_put_global_string(ctx, "adder");
+
+    duk_eval_string(ctx, js);
+
+    duk_eval_string(ctx, "print('2+3=' + adder(2, 3));");
+    duk_pop(ctx);  /* pop eval result */
+
+    duk_destroy_heap(ctx);
+
+    return 1;
+}
+
+/**
+ * @brief reads "<executable name>.js"
+ * @param js the source as UTF-8 will be stored here
+ * @return 0 = error, <> 0 = no error
+ */
+static int readJS(char** js)
+{
+    *js = 0;
+
+    int ret = 1;
+
+    // TODO: file name
+    HANDLE f = CreateFile(L"exeproxy.js", GENERIC_READ,
+            FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (f == INVALID_HANDLE_VALUE) {
+        ret = 0;
+        printError(GetLastError());
+    }
+
+    if (ret) {
+        // TODO: read the whole file
+        *js = malloc(1001);
+
+        DWORD read;
+        if (!ReadFile(f, *js, 1000, &read, NULL)) {
+            ret = 0;
+            printError(GetLastError());
+        } else {
+            *(*js + read) = 0;
+        }
+    }
+
+    if (!ret) {
+        free(*js);
+        *js = 0;
+    }
+
+    if (f != INVALID_HANDLE_VALUE)
+        CloseHandle(f);
+
+    return ret;
+}
+
+
 int wmain(int argc, wchar_t **argv)
 {
     int ret = 0;
+
+    // TODO: allow missing .js file
+
+    char* js = 0;
+    if (!readJS(&js)) {
+        ret = 1;
+    }
+
+    if (!ret) {
+        if (!executeJS(js)) {
+            ret = 1;
+        }
+    }
 
     if (argc >= 4 && wcscmp(argv[1], L"exeproxy-copy") == 0) {
         bool copyIcon = false;
@@ -354,6 +459,7 @@ int wmain(int argc, wchar_t **argv)
     free(exe);
     free(newExe);
     free(args);
+    free(js);
 
     return ret;
 }
