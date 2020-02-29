@@ -289,20 +289,6 @@ static duk_ret_t native_print(duk_context *ctx)
     return 0;
 }
 
-static duk_ret_t native_adder(duk_context *ctx)
-{
-    int i;
-    int n = duk_get_top(ctx);  /* #args */
-    double res = 0.0;
-
-    for (i = 0; i < n; i++) {
-        res += duk_to_number(ctx, i);
-    }
-
-    duk_push_number(ctx, res);
-    return 1;  /* one return value */
-}
-
 static duk_ret_t native_execSync(duk_context *ctx)
 {
     const char* exe = duk_safe_to_string(ctx, 0);
@@ -321,6 +307,13 @@ static duk_ret_t native_execSync(duk_context *ctx)
     return 1;  /* one return value */
 }
 
+static duk_ret_t native_exit(duk_context *ctx)
+{
+    int ec = duk_to_int(ctx, 0);
+
+    exit(ec);
+}
+
 /**
  * @brief executes JavaScript
  * @param js JavaScript as UTF-8
@@ -330,34 +323,33 @@ static duk_ret_t native_execSync(duk_context *ctx)
  */
 static int executeJS(char* js, char* executable, char* targetExecutable)
 {
-    wprintf(L"executeJS()");
+    //wprintf(L"executeJS()");
+
     int ret = 0;
 
     duk_context *ctx = duk_create_heap_default();
 
     duk_push_c_function(ctx, native_print, DUK_VARARGS);
     duk_put_global_string(ctx, "print");
-    duk_push_c_function(ctx, native_adder, DUK_VARARGS);
-    duk_put_global_string(ctx, "adder");
 
     // system object
     duk_push_object(ctx);  /* push object which will become "system" */
 
-    duk_push_c_function(ctx, native_adder, DUK_VARARGS);  /* Stack afterwards: [ ... "system" native_adder ] */
-    duk_put_prop_string(ctx, -2, "adder");  /* system.adder = native_adder function */
-
     duk_push_c_function(ctx, native_execSync, 2);
     duk_put_prop_string(ctx, -2, "execSync");
+
+    duk_push_c_function(ctx, native_exit, 1);
+    duk_put_prop_string(ctx, -2, "exit");
 
     duk_push_string(ctx, "targetExecutable");
     duk_push_string(ctx, targetExecutable);
     duk_put_prop(ctx, -3);
 
-    duk_push_string(ctx, "executable");
+    duk_push_string(ctx, "argv0");
     duk_push_string(ctx, executable);
     duk_put_prop(ctx, -3);
 
-    duk_put_global_string(ctx, "system");  /* set "process" into the global object */
+    duk_put_global_string(ctx, "process");  /* set "process" into the global object */
 
     duk_int_t rc = duk_peval_string(ctx, js);
     if (rc != 0) {
@@ -390,39 +382,54 @@ static char* toUTF8(wchar_t* s)
 }
 
 /**
- * @brief reads "<executable name>.js"
+ * @brief reads a JavaScript file
+ * @param filename "<executable name>.js"
  * @param js the source as UTF-8 will be stored here
  * @return error code or 0
  */
-static int readJS(char** js)
+static int readJS(wchar_t* filename, char** js)
 {
-    wprintf(L"readJS()");
+    //wprintf(L"readJS()");
+
     *js = 0;
 
-    int ret = 0;
+    int err = 0;
 
-    // TODO: file name
-    HANDLE f = CreateFile(L"exeproxy.js", GENERIC_READ,
+    HANDLE f = CreateFile(filename, GENERIC_READ,
             FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (f == INVALID_HANDLE_VALUE) {
-        ret = 1;
+        err = 1;
         printError(GetLastError());
     }
 
-    if (!ret) {
-        // TODO: read the whole file
-        *js = malloc(1001);
+    LARGE_INTEGER sz;
+    if (!err) {
+        if (!GetFileSizeEx(f, &sz)) {
+            err = 1;
+            printError(GetLastError());
+        }
+    }
+
+    if (!err) {
+        if (sz.HighPart > 0 || sz.LowPart > 100 * 1024 * 1024) {
+            err = 1;
+            wprintf(L"JavaScript file is too big\n");
+        }
+    }
+
+    if (!err) {
+        *js = malloc(sz.LowPart + 1);
 
         DWORD read;
-        if (!ReadFile(f, *js, 1000, &read, NULL)) {
-            ret = 1;
+        if (!ReadFile(f, *js, sz.LowPart, &read, NULL)) {
+            err = 1;
             printError(GetLastError());
         } else {
             *(*js + read) = 0;
         }
     }
 
-    if (ret) {
+    if (err) {
         free(*js);
         *js = 0;
     }
@@ -430,12 +437,20 @@ static int readJS(char** js)
     if (f != INVALID_HANDLE_VALUE)
         CloseHandle(f);
 
-    return ret;
+    return err;
+}
+
+BOOL fileExists(LPCTSTR szPath)
+{
+  DWORD dwAttrib = GetFileAttributes(szPath);
+
+  return (dwAttrib != INVALID_FILE_ATTRIBUTES &&
+         !(dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
 }
 
 int wmain(int argc, wchar_t **argv)
 {
-    wprintf(L"main()");
+    //wprintf(L"main()");
 
     int ret = 0;
 
@@ -527,6 +542,26 @@ int wmain(int argc, wchar_t **argv)
 
     free(target);
 
+    // find the name of the .js file
+    wchar_t* javaScript = 0;
+    if (!ret) {
+        javaScript = wcsdup(exe);
+        _wcslwr(javaScript);
+        int len = wcslen(javaScript);
+        if (len > 4 && *(javaScript + len - 4) == '.' && *(javaScript + len - 3) == 'e' &&
+                *(javaScript + len - 2) == 'x' && *(javaScript + len - 1) == 'e') {
+            wchar_t* p = javaScript + wcslen(javaScript) - 3;
+            *p = 'j';
+            p++;
+            *p = 's';
+            p++;
+            *p = 0;
+        } else {
+            ret = ERROR_EXIT_CODE;
+            wprintf(L"Program name does not end with .exe\n");
+        }
+    }
+
     wchar_t* cmdLine = 0;
     if (!ret) {
         cmdLine = malloc((wcslen(newExe) + wcslen(args) + 4) * sizeof(wchar_t));
@@ -539,33 +574,37 @@ int wmain(int argc, wchar_t **argv)
         }
     }
 
-    // TODO: allow missing .js file
     if (!ret) {
-        char* js = 0;
-        if (readJS(&js) != 0) {
-            ret = 1;
-        }
-
-        if (!ret) {
-            char* exeUTF8 = toUTF8(exe);
-            char* newExeUTF8 = toUTF8(newExe);
-            if (executeJS(js, exeUTF8, newExeUTF8) != 0) {
-                ret = ERROR_EXIT_CODE;
+        if (fileExists(javaScript)) {
+            char* js = 0;
+            if (readJS(javaScript, &js) != 0) {
+                ret = 1;
             }
-            free(newExeUTF8);
-            free(exeUTF8);
+
+            if (!ret) {
+                char* exeUTF8 = toUTF8(exe);
+                char* newExeUTF8 = toUTF8(newExe);
+                if (executeJS(js, exeUTF8, newExeUTF8) != 0) {
+                    ret = ERROR_EXIT_CODE;
+                }
+                free(newExeUTF8);
+                free(exeUTF8);
+            }
+            free(js);
         }
-        free(js);
     }
 
+    /* TODO: only execute without JavaScript
     if (!ret) {
         ret = exec(newExe, cmdLine);
     }
+    */
     
     free(cmdLine);
     free(exe);
     free(newExe);
     free(args);
+    free(javaScript);
 
     return ret;
 }
