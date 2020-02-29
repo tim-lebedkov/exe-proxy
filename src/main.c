@@ -1,8 +1,15 @@
+// should the JavaScript be supported?
+#define EXE_PROXY_JAVASCRIPT 1
+
 #include <stdio.h>
 #include <windows.h>
 #include <string.h>
 #include <stdbool.h>
+#include <shellapi.h>
+
+#ifdef EXE_PROXY_JAVASCRIPT
 #include "duktape.h"
+#endif
 
 #define ERROR_EXIT_CODE 20000
 
@@ -29,7 +36,7 @@ static wchar_t* toUTF16(const char* s)
  * @brief full path to the current exe file
  * @return path that must be freed later or 0 if an error occures
  */
-wchar_t* getExePath()
+static wchar_t* getExePath()
 {
     // get our executable name
     DWORD sz = MAX_PATH;
@@ -50,7 +57,7 @@ typedef struct {
     HANDLE hUpdateRes;
 } EnumResourcesData;
 
-WINBOOL CALLBACK enumResources(HMODULE hModule, LPCWSTR lpType, LPWSTR lpName,
+static WINBOOL CALLBACK enumResources(HMODULE hModule, LPCWSTR lpType, LPWSTR lpName,
         LONG_PTR lParam)
 {
     EnumResourcesData* data = (EnumResourcesData*) lParam;
@@ -88,7 +95,7 @@ WINBOOL CALLBACK enumResources(HMODULE hModule, LPCWSTR lpType, LPWSTR lpName,
     return TRUE;
 }
 
-void printError(DWORD err) {
+static void printError(DWORD err) {
     wprintf(L"Error %d\n", err);
 }
 
@@ -101,7 +108,7 @@ void printError(DWORD err) {
  * @param copyVersion should the version information be copied
  * @param copyManifest should the executable manifest be copied
  */
-void copyResources(HANDLE hUpdateRes, LPCWSTR lpszSourceFile, bool copyIcon,
+static void copyResources(HANDLE hUpdateRes, LPCWSTR lpszSourceFile, bool copyIcon,
         bool copyVersion, bool copyManifest)
 {
     //wprintf(L"Copying the icon\n");
@@ -143,7 +150,7 @@ void copyResources(HANDLE hUpdateRes, LPCWSTR lpszSourceFile, bool copyIcon,
     }
 }
 
-int copyExe(wchar_t* exeProxy, wchar_t* target, bool copyIcon,
+static int copyExe(wchar_t* exeProxy, wchar_t* target, bool copyIcon,
         bool copyVersion, bool copyManifest)
 {
     int ret = 0;
@@ -211,7 +218,7 @@ int copyExe(wchar_t* exeProxy, wchar_t* target, bool copyIcon,
 
 PROCESS_INFORMATION pinfo;
 
-BOOL WINAPI ctrlHandler(DWORD fdwCtrlType)
+static BOOL WINAPI ctrlHandler(DWORD fdwCtrlType)
 {
     wprintf(L"ctrlHandler\n");
     switch (fdwCtrlType) {
@@ -238,13 +245,15 @@ BOOL WINAPI ctrlHandler(DWORD fdwCtrlType)
 
 /**
  * @brief executes a program
- * @param newExe executable
  * @param cmdLine command line
  * @return exit code
  */
-static int exec(wchar_t* newExe, wchar_t* cmdLine)
+static int exec(wchar_t* cmdLine)
 {
     int ret = 0;
+
+    int numArgs;
+    LPWSTR* args = CommandLineToArgvW(cmdLine, &numArgs);
 
     STARTUPINFOW startupInfo = {
         sizeof(STARTUPINFO), 0, 0, 0,
@@ -253,7 +262,7 @@ static int exec(wchar_t* newExe, wchar_t* cmdLine)
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     };
     WINBOOL success = CreateProcess(
-            newExe,
+            numArgs > 0 ? args[0] : L"",
             cmdLine,
             0, 0, TRUE,
             CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_PROCESS_GROUP, 0,
@@ -272,39 +281,35 @@ static int exec(wchar_t* newExe, wchar_t* cmdLine)
         CloseHandle(pinfo.hThread);
         CloseHandle(pinfo.hProcess);
     } else {
-        wprintf(L"Error starting %ls %ls\n", newExe, cmdLine);
+        wprintf(L"Error starting %ls\n", cmdLine);
         ret = ERROR_EXIT_CODE;
     }
 
     return ret;
 }
 
-
-static duk_ret_t native_print(duk_context *ctx)
-{
-    duk_push_string(ctx, " ");
-    duk_insert(ctx, 0);
-    duk_join(ctx, duk_get_top(ctx) - 1);
-    printf("%s\n", duk_safe_to_string(ctx, -1));
-    return 0;
-}
+#ifdef EXE_PROXY_JAVASCRIPT
 
 static duk_ret_t native_execSync(duk_context *ctx)
 {
-    const char* exe = duk_safe_to_string(ctx, 0);
-    const char* cmdLine = duk_safe_to_string(ctx, 1);
+    const char* cmdLine = duk_safe_to_string(ctx, 0);
 
-    wchar_t* wexe = toUTF16(exe);
     wchar_t* wcmdLine = toUTF16(cmdLine);
 
-    int ec = exec(wexe, wcmdLine);
+    int ec = exec(wcmdLine);
 
-    free(wexe);
     free(wcmdLine);
 
     duk_push_number(ctx, ec);
 
     return 1;  /* one return value */
+}
+
+static duk_ret_t native_log(duk_context *ctx)
+{
+    printf("%s\n", duk_safe_to_string(ctx, 0));
+
+    return 0;  /* one return value */
 }
 
 static duk_ret_t native_exit(duk_context *ctx)
@@ -331,10 +336,9 @@ static duk_ret_t native_totalmem(duk_context *ctx)
  * @brief executes JavaScript
  * @param js JavaScript as UTF-8
  * @param executable path to this executable as UTF-8
- * @param targetExecutable path to the target executable as UTF-8
  * @return error code or 0
  */
-static int executeJS(char* js, char* executable, char* targetExecutable)
+static int executeJS(char* js, char* executable)
 {
     //wprintf(L"executeJS()");
 
@@ -342,19 +346,12 @@ static int executeJS(char* js, char* executable, char* targetExecutable)
 
     duk_context *ctx = duk_create_heap_default();
 
-    duk_push_c_function(ctx, native_print, DUK_VARARGS);
-    duk_put_global_string(ctx, "print");
-
     {
         // process
         duk_push_object(ctx);  /* push object which will become "process" */
 
         duk_push_c_function(ctx, native_exit, 1);
         duk_put_prop_string(ctx, -2, "exit");
-
-        duk_push_string(ctx, "targetExecutable");
-        duk_push_string(ctx, targetExecutable);
-        duk_put_prop(ctx, -3);
 
         duk_push_string(ctx, "argv0");
         duk_push_string(ctx, executable);
@@ -367,7 +364,7 @@ static int executeJS(char* js, char* executable, char* targetExecutable)
         // child_process
         duk_push_object(ctx);
 
-        duk_push_c_function(ctx, native_execSync, 2);
+        duk_push_c_function(ctx, native_execSync, 1);
         duk_put_prop_string(ctx, -2, "execSync");
 
         duk_put_global_string(ctx, "child_process");
@@ -381,6 +378,16 @@ static int executeJS(char* js, char* executable, char* targetExecutable)
         duk_put_prop_string(ctx, -2, "totalmem");
 
         duk_put_global_string(ctx, "os");
+    }
+
+    {
+        // console
+        duk_push_object(ctx);
+
+        duk_push_c_function(ctx, native_log, 1);
+        duk_put_prop_string(ctx, -2, "log");
+
+        duk_put_global_string(ctx, "console");
     }
 
     duk_int_t rc = duk_peval_string(ctx, js);
@@ -472,6 +479,8 @@ static int readJS(wchar_t* filename, char** js)
     return err;
 }
 
+#endif
+
 BOOL fileExists(LPCTSTR szPath)
 {
   DWORD dwAttrib = GetFileAttributes(szPath);
@@ -532,10 +541,49 @@ int wmain(int argc, wchar_t **argv)
         }
     }
 
+#ifdef EXE_PROXY_JAVASCRIPT
+    // find the name of the .js file
+    wchar_t* javaScript = 0;
+    if (!ret) {
+        javaScript = wcsdup(exe);
+        _wcslwr(javaScript);
+        int len = wcslen(javaScript);
+        if (len > 4 && wcscmp(L".exe", javaScript + len - 4) == 0) {
+            wchar_t* p = javaScript + len - 3;
+            *p = 'j';
+            p++;
+            *p = 's';
+            p++;
+            *p = 0;
+        } else {
+            ret = ERROR_EXIT_CODE;
+            wprintf(L"Program name does not end with .exe\n");
+        }
+    }
+
+    if (!ret) {
+        if (fileExists(javaScript)) {
+            char* js = 0;
+            if (readJS(javaScript, &js) != 0) {
+                ret = 1;
+            }
+
+            if (!ret) {
+                char* exeUTF8 = toUTF8(exe);
+                if (executeJS(js, exeUTF8) != 0) {
+                    ret = ERROR_EXIT_CODE;
+                }
+                free(exeUTF8);
+            }
+            free(js);
+        }
+    }
+
+    free(javaScript);
+
+#else
     wchar_t* target = 0;
 
-    target = wcsdup(L"C:\\msys64\\mingw32\\bin\\addr2line.exe");
-    /* TODO
     if (!ret) {
         target = malloc(MAX_PATH * sizeof(TCHAR));
         if (LoadString(0, (TARGET_EXE_RESOURCE - 1) * 16 + 1,
@@ -544,7 +592,6 @@ int wmain(int argc, wchar_t **argv)
             wprintf(L"Cannot load the target executable path from the resource\n");
         }
     }
-    */
 
     // find the name of the target executable
     wchar_t* newExe = 0;
@@ -574,26 +621,6 @@ int wmain(int argc, wchar_t **argv)
 
     free(target);
 
-    // find the name of the .js file
-    wchar_t* javaScript = 0;
-    if (!ret) {
-        javaScript = wcsdup(exe);
-        _wcslwr(javaScript);
-        int len = wcslen(javaScript);
-        if (len > 4 && *(javaScript + len - 4) == '.' && *(javaScript + len - 3) == 'e' &&
-                *(javaScript + len - 2) == 'x' && *(javaScript + len - 1) == 'e') {
-            wchar_t* p = javaScript + len - 3;
-            *p = 'j';
-            p++;
-            *p = 's';
-            p++;
-            *p = 0;
-        } else {
-            ret = ERROR_EXIT_CODE;
-            wprintf(L"Program name does not end with .exe\n");
-        }
-    }
-
     wchar_t* cmdLine = 0;
     if (!ret) {
         cmdLine = malloc((wcslen(newExe) + wcslen(args) + 4) * sizeof(wchar_t));
@@ -607,36 +634,15 @@ int wmain(int argc, wchar_t **argv)
     }
 
     if (!ret) {
-        if (fileExists(javaScript)) {
-            char* js = 0;
-            if (readJS(javaScript, &js) != 0) {
-                ret = 1;
-            }
-
-            if (!ret) {
-                char* exeUTF8 = toUTF8(exe);
-                char* newExeUTF8 = toUTF8(newExe);
-                if (executeJS(js, exeUTF8, newExeUTF8) != 0) {
-                    ret = ERROR_EXIT_CODE;
-                }
-                free(newExeUTF8);
-                free(exeUTF8);
-            }
-            free(js);
-        }
-    }
-
-    /* TODO: only execute without JavaScript
-    if (!ret) {
         ret = exec(newExe, cmdLine);
     }
-    */
-    
+
     free(cmdLine);
-    free(exe);
     free(newExe);
+#endif
+    
+    free(exe);
     free(args);
-    free(javaScript);
 
     return ret;
 }

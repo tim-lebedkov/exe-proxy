@@ -93,7 +93,7 @@ set(OUTPUT_FILE_NAME "exeproxy.exe")
 
 add_executable(exeproxy ${EXEPROXY_SOURCES})
 
-target_link_libraries(exeproxy)
+target_link_libraries(exeproxy shell32)
 target_include_directories(exeproxy PRIVATE ${CMAKE_SOURCE_DIR}/../wpmcpp/src)
 target_compile_definitions(exeproxy PRIVATE -D NPACKD_VERSION="${NPACKD_VERSION}")
 
