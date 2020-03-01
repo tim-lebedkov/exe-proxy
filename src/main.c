@@ -337,8 +337,13 @@ static duk_ret_t native_jvm(duk_context *ctx)
 {
     bool err = false;
 
-    const char* dll = duk_safe_to_string(ctx, 0);
-    const char* class = duk_safe_to_string(ctx, 1);
+    duk_get_prop_string(ctx, 0, "jvmDLL");
+    const char* dll = duk_safe_to_string(ctx, -1);
+    duk_pop(ctx);
+
+    duk_get_prop_string(ctx, 0, "mainClass");
+    const char* class = duk_safe_to_string(ctx, -1);
+    duk_pop(ctx);
 
     wchar_t* wdll = toUTF16(dll);
 
@@ -452,7 +457,7 @@ static int executeJS(char* js, char* executable)
         duk_push_c_function(ctx, native_exit, 1);
         duk_put_prop_string(ctx, -2, "exit");
 
-        duk_push_c_function(ctx, native_jvm, 2);
+        duk_push_c_function(ctx, native_jvm, 1);
         duk_put_prop_string(ctx, -2, "loadJVM");
 
         duk_push_string(ctx, "argv0");

@@ -50,11 +50,14 @@ If the parameter --copy-version is present, the version information is copied.
 2. The version with JavaScript reads the JavaScript file the same name as
 the executable and the extension .js and executes it using the Duktape library
 (https://duktape.org/). In the JavaScript code are also defined:
-  * os.totalmem() - total physical system memory in bytes
-  * process.argv0 - executable name including path
-  * child_process.execSync(command) - executes a program and returns the exit code
-  * process.exit(ec) - exits the program with the specified exit code  
-  * process.loadJVM(pathToJVMDLL, fullClassName) - execute "public static void main(String[])" in the specified class
+  - os.totalmem() - total physical system memory in bytes
+  - process.argv0 - executable name including path
+  - child_process.execSync(command) - executes a program and returns the exit code
+  - process.exit(ec) - exits the program with the specified exit code  
+  - process.loadJVM(options) - execute "public static void main(String[])" in the specified class
+     - options.jvmDLL - path to the jvm.dll
+	 - options.mainClass - name of the main class
+	 
 
 Example JavaScript file:
 
@@ -62,7 +65,10 @@ Example JavaScript file:
 console.log('os.totalmem = ' + os.totalmem());
 console.log('exe = ' + process.argv0);
 
-process.loadJVM("C:\\Program Files (x86)\\Java\\jre7\\bin\\client\\jvm.dll", "tests/Demo");
+process.loadJVM({
+	jvmDLL: "C:\\Program Files (x86)\\Java\\jre7\\bin\\client\\jvm.dll", 
+	mainClass: "tests/Demo"
+});
 
 var ec = child_process.execSync("C:\\msys64\\mingw32\\bin\\addr2line.exe params");
 console.log('exit code = ' + ec);
