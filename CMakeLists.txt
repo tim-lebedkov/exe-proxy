@@ -94,7 +94,8 @@ set(OUTPUT_FILE_NAME "exeproxy.exe")
 add_executable(exeproxy ${EXEPROXY_SOURCES})
 
 target_link_libraries(exeproxy shell32)
-target_include_directories(exeproxy PRIVATE ${CMAKE_SOURCE_DIR}/../wpmcpp/src)
+target_include_directories(exeproxy PRIVATE "C:/Program Files/JDK_64_bit/include" "C:/Program Files/JDK_64_bit/include/win32")
+
 target_compile_definitions(exeproxy PRIVATE -D NPACKD_VERSION="${NPACKD_VERSION}")
 
 install(TARGETS exeproxy DESTINATION ${CMAKE_INSTALL_PREFIX})

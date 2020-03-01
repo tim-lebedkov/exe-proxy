@@ -32,7 +32,9 @@ reside in the same directory as the EXE Proxy itself.
 In order to change the target executable resource entry you could start the EXE
 Proxy with the parameter "exe-proxy-copy":
 
+```bat
 exeproxy.exe exeproxy-copy <output file name> <target executable name> [--copy-icons] [--copy-version]
+```
 
 The second parameter should be the name of the output exe file where a copy of
 the EXE Proxy will be stored. The third parameter should either contain an
@@ -52,12 +54,15 @@ the executable and the extension .js and executes it using the Duktape library
   * process.argv0 - executable name including path
   * child_process.execSync(command) - executes a program and returns the exit code
   * process.exit(ec) - exits the program with the specified exit code  
+  * process.loadJVM(pathToJVMDLL, fullClassName) - execute "public static void main(String[])" in the specified class
 
 Example JavaScript file:
 
 ```JavaScript
 console.log('os.totalmem = ' + os.totalmem());
 console.log('exe = ' + process.argv0);
+
+process.loadJVM("C:\\Program Files (x86)\\Java\\jre7\\bin\\client\\jvm.dll", "tests/Demo");
 
 var ec = child_process.execSync("C:\\msys64\\mingw32\\bin\\addr2line.exe params");
 console.log('exit code = ' + ec);

@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <shellapi.h>
+#include <jni.h>
 
 #ifdef EXE_PROXY_JAVASCRIPT
 #include "duktape.h"
@@ -332,6 +333,104 @@ static duk_ret_t native_totalmem(duk_context *ctx)
     return 1;
 }
 
+static duk_ret_t native_jvm(duk_context *ctx)
+{
+    bool err = false;
+
+    const char* dll = duk_safe_to_string(ctx, 0);
+    const char* class = duk_safe_to_string(ctx, 1);
+
+    wchar_t* wdll = toUTF16(dll);
+
+    HMODULE m = LoadLibrary(wdll);
+    if (m == NULL) {
+        wprintf(L"Error loading the JVM DLL\n");
+        printError(GetLastError());
+        err = true;
+    }
+
+    typedef jint (JNICALL *JNI_createJavaVM)(JavaVM **pvm, JNIEnv **env, void *args);
+    JNI_createJavaVM createJavaVM;
+    if (!err) {
+        createJavaVM = (JNI_createJavaVM) GetProcAddress(m, "JNI_CreateJavaVM");
+        if (createJavaVM == NULL) {
+            wprintf(L"Error finding the procedure JNI_CreateJavaVM in the DLL\n");
+            printError(GetLastError());
+        }
+    }
+
+    JavaVM *javaVM = 0;
+    JNIEnv *jniEnv = 0;
+    if (!err) {
+        JavaVMOption jvmopt[1];
+        jvmopt[0].optionString = "-Djava.class.path=C:\\Users\\IEUser\\Documents\\exe-proxy";
+
+        JavaVMInitArgs vmArgs;
+        vmArgs.version = JNI_VERSION_1_2;
+        vmArgs.nOptions = 1;
+        vmArgs.options = jvmopt;
+        vmArgs.ignoreUnrecognized = JNI_TRUE;
+
+        // Create the JVM
+        long flag = createJavaVM(&javaVM, &jniEnv, &vmArgs);
+        if (flag == JNI_ERR) {
+            wprintf(L"Error creating VM.\n");
+            err = true;
+        }
+    }
+
+    jclass jcls;
+    if (!err) {
+        jcls = (*jniEnv)->FindClass(jniEnv, class);
+        if (jcls == NULL) {
+            (*jniEnv)->ExceptionDescribe(jniEnv);
+            err = true;
+        }
+    }
+
+    jmethodID methodId;
+    if (!err) {
+        methodId = (*jniEnv)->GetStaticMethodID(jniEnv, jcls,
+                "main", "([Ljava/lang/String;)V");
+        if (methodId == NULL) {
+            wprintf(L"Cannot find the main() method.\n");
+            err = true;
+        }
+    }
+
+    jclass stringClass;
+    if (!err) {
+        stringClass = (*jniEnv)->FindClass(jniEnv, "java/lang/String");
+        if(stringClass == NULL) {
+            wprintf(L"Could not find String class\n");
+            err = true;
+        }
+    }
+
+    if (!err) {
+        // Create the run args
+        int argc = 3;
+        char* argv[] = {"first", "second", "third4543535"};
+        jobjectArray args = (*jniEnv)->NewObjectArray(jniEnv, argc, stringClass, NULL);
+        for(int i = 0; i < argc; i++) {
+            (*jniEnv)->SetObjectArrayElement(jniEnv, args, i, (*jniEnv)->NewStringUTF(jniEnv, argv[i]));
+        }
+
+        (*jniEnv)->CallStaticVoidMethod(jniEnv, jcls, methodId, args);
+        if ((*jniEnv)->ExceptionCheck(jniEnv)) {
+            (*jniEnv)->ExceptionDescribe(jniEnv);
+            (*jniEnv)->ExceptionClear(jniEnv);
+        }
+    }
+
+    if (javaVM)
+        (*javaVM)->DestroyJavaVM(javaVM);
+
+    free(wdll);
+
+    return 0;
+}
+
 /**
  * @brief executes JavaScript
  * @param js JavaScript as UTF-8
@@ -352,6 +451,9 @@ static int executeJS(char* js, char* executable)
 
         duk_push_c_function(ctx, native_exit, 1);
         duk_put_prop_string(ctx, -2, "exit");
+
+        duk_push_c_function(ctx, native_jvm, 2);
+        duk_put_prop_string(ctx, -2, "loadJVM");
 
         duk_push_string(ctx, "argv0");
         duk_push_string(ctx, executable);
