@@ -51,6 +51,7 @@ If the parameter --copy-version is present, the version information is copied.
 the executable and the extension .js and executes it using the Duktape library
 (https://duktape.org/). In the JavaScript code are also defined:
   - os.totalmem() - total physical system memory in bytes
+  - process.argv - executable parameters as an array of strings. The value at the index 0 is the name of the executable used on the command line.
   - process.argv0 - executable name including path
   - child_process.execSync(command) - executes a program and returns the exit code
   - process.exit(ec) - exits the program with the specified exit code  
@@ -64,6 +65,11 @@ Example JavaScript file:
 ```JavaScript
 console.log('os.totalmem = ' + os.totalmem());
 console.log('exe = ' + process.argv0);
+
+console.log(process.argv.length);
+for (var i = 0; i < process.argv.length; i++) {
+	console.log("JS argument " + i + " = " + process.argv[i]);
+}
 
 process.loadJVM({
 	jvmDLL: "C:\\Program Files (x86)\\Java\\jre7\\bin\\client\\jvm.dll", 

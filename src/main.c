@@ -286,6 +286,8 @@ static int exec(wchar_t* cmdLine)
         ret = ERROR_EXIT_CODE;
     }
 
+    LocalFree(args);
+
     return ret;
 }
 
@@ -437,6 +439,23 @@ static duk_ret_t native_jvm(duk_context *ctx)
 }
 
 /**
+ * @brief converts a string to UTF-8
+ * @param s UTF-16
+ * @return new UTF-8 string
+ */
+static char* toUTF8(wchar_t* s)
+{
+    int n = wcslen(s);
+
+    int sz = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS | WC_NO_BEST_FIT_CHARS, s, n, NULL, 0, NULL, NULL);
+    char* r = malloc(sz);
+    sz = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS | WC_NO_BEST_FIT_CHARS, s, n, r, sz, NULL, NULL);
+    *(r + sz) = 0;
+
+    return r;
+}
+
+/**
  * @brief executes JavaScript
  * @param js JavaScript as UTF-8
  * @param executable path to this executable as UTF-8
@@ -463,6 +482,20 @@ static int executeJS(char* js, char* executable)
         duk_push_string(ctx, "argv0");
         duk_push_string(ctx, executable);
         duk_put_prop(ctx, -3);
+
+        int numArgs;
+        LPTSTR cmdLine = GetCommandLine();
+        LPWSTR* args = CommandLineToArgvW(cmdLine, &numArgs);
+        duk_push_string(ctx, "argv");
+        duk_idx_t arr_idx = duk_push_array(ctx);
+        for (int i = 0; i < numArgs; i++) {
+            char* val = toUTF8(args[i]);
+            duk_push_string(ctx, val);
+            duk_put_prop_index(ctx, arr_idx, i);
+            free(val);
+        }
+        duk_put_prop(ctx, -3);
+        LocalFree(args);
 
         duk_put_global_string(ctx, "process");  /* set "process" into the global object */
     }
@@ -508,23 +541,6 @@ static int executeJS(char* js, char* executable)
     duk_destroy_heap(ctx);
 
     return ret;
-}
-
-/**
- * @brief converts a string to UTF-8
- * @param s UTF-16
- * @return new UTF-8 string
- */
-static char* toUTF8(wchar_t* s)
-{
-    int n = wcslen(s);
-
-    int sz = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS | WC_NO_BEST_FIT_CHARS, s, n, NULL, 0, NULL, NULL);
-    char* r = malloc(sz);
-    sz = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS | WC_NO_BEST_FIT_CHARS, s, n, r, sz, NULL, NULL);
-    *(r + sz) = 0;
-
-    return r;
 }
 
 /**
