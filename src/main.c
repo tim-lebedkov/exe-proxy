@@ -369,8 +369,17 @@ static duk_ret_t native_jvm(duk_context *ctx)
     JavaVM *javaVM = 0;
     JNIEnv *jniEnv = 0;
     if (!err) {
-        JavaVMOption jvmopt[1];
-        jvmopt[0].optionString = "-Djava.class.path=C:\\Users\\IEUser\\Documents\\exe-proxy";
+        // Create the JVM options
+        duk_get_prop_string(ctx, 0, "jvmOptions");
+        int argc = duk_get_length(ctx, -1);
+        JavaVMOption* jvmopt = malloc(argc * sizeof(JavaVMOption));
+        for(int i = 0; i < argc; i++) {
+            duk_get_prop_index(ctx, -1, i);
+            const char* val = duk_safe_to_string(ctx, -1);
+            duk_pop(ctx);
+            jvmopt[i].optionString = (char*) val;
+            jvmopt[i].extraInfo = 0;
+        }
 
         JavaVMInitArgs vmArgs;
         vmArgs.version = JNI_VERSION_1_2;
@@ -384,6 +393,8 @@ static duk_ret_t native_jvm(duk_context *ctx)
             wprintf(L"Error creating VM.\n");
             err = true;
         }
+
+        free(jvmopt);
     }
 
     jclass jcls;
