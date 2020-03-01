@@ -77,7 +77,7 @@ for (var i = 0; i < process.argv.length; i++) {
 process.loadJVM({
 	jvmDLL: "C:\\Program Files (x86)\\Java\\jre7\\bin\\client\\jvm.dll", 
 	jvmOptions: ["-Djava.class.path=C:\\Users\\IEUser\\Documents\\exe-proxy"],
-	mainClass: "tests/Demo",
+	mainClass: "tests.Demo",
 	args: ["first", "second"]
 });
 

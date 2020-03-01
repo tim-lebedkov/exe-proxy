@@ -293,6 +293,15 @@ static int exec(wchar_t* cmdLine)
 
 #ifdef EXE_PROXY_JAVASCRIPT
 
+static char* replaceChar(char* str, char find, char replace){
+    char *current_pos = strchr(str, find);
+    while (current_pos) {
+        *current_pos = replace;
+        current_pos = strchr(current_pos + 1, find);
+    }
+    return str;
+}
+
 static duk_ret_t native_execSync(duk_context *ctx)
 {
     const char* cmdLine = duk_safe_to_string(ctx, 0);
@@ -399,11 +408,14 @@ static duk_ret_t native_jvm(duk_context *ctx)
 
     jclass jcls;
     if (!err) {
-        jcls = (*jniEnv)->FindClass(jniEnv, class);
+        char* classSlashes = strdup(class);
+        replaceChar(classSlashes, '.' , '/');
+        jcls = (*jniEnv)->FindClass(jniEnv, classSlashes);
         if (jcls == NULL) {
             (*jniEnv)->ExceptionDescribe(jniEnv);
             err = true;
         }
+        free(classSlashes);
     }
 
     jmethodID methodId;
