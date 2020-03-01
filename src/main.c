@@ -416,11 +416,14 @@ static duk_ret_t native_jvm(duk_context *ctx)
 
     if (!err) {
         // Create the run args
-        int argc = 3;
-        char* argv[] = {"first", "second", "third4543535"};
+        duk_get_prop_string(ctx, 0, "args");
+        int argc = duk_get_length(ctx, -1);
         jobjectArray args = (*jniEnv)->NewObjectArray(jniEnv, argc, stringClass, NULL);
         for(int i = 0; i < argc; i++) {
-            (*jniEnv)->SetObjectArrayElement(jniEnv, args, i, (*jniEnv)->NewStringUTF(jniEnv, argv[i]));
+            duk_get_prop_index(ctx, -1, i);
+            const char* val = duk_safe_to_string(ctx, -1);
+            duk_pop(ctx);
+            (*jniEnv)->SetObjectArrayElement(jniEnv, args, i, (*jniEnv)->NewStringUTF(jniEnv, val));
         }
 
         (*jniEnv)->CallStaticVoidMethod(jniEnv, jcls, methodId, args);

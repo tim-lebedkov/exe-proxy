@@ -58,6 +58,7 @@ the executable and the extension .js and executes it using the Duktape library
   - process.loadJVM(options) - execute "public static void main(String[])" in the specified class
      - options.jvmDLL - path to the jvm.dll
 	 - options.mainClass - name of the main class
+	 - options.args - argument for "public static void main(String[])" as an array of strings
 	 
 
 Example JavaScript file:
@@ -73,7 +74,8 @@ for (var i = 0; i < process.argv.length; i++) {
 
 process.loadJVM({
 	jvmDLL: "C:\\Program Files (x86)\\Java\\jre7\\bin\\client\\jvm.dll", 
-	mainClass: "tests/Demo"
+	mainClass: "tests/Demo",
+	args: ["first", "second"]
 });
 
 var ec = child_process.execSync("C:\\msys64\\mingw32\\bin\\addr2line.exe params");
