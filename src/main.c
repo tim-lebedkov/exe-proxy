@@ -547,16 +547,70 @@ static duk_ret_t native_totalmem(duk_context *ctx)
     return 1;
 }
 
+static duk_ret_t native_javaCallMain(duk_context* ctx)
+{
+    bool err = false;
+
+    const char* class = duk_safe_to_string(ctx, 0);
+
+    jclass jcls;
+    if (!err) {
+        char* classSlashes = strdup(class);
+        replaceChar(classSlashes, '.' , '/');
+        jcls = (*jniEnv)->FindClass(jniEnv, classSlashes);
+        if (jcls == NULL) {
+            (*jniEnv)->ExceptionDescribe(jniEnv);
+            err = true;
+        }
+        free(classSlashes);
+    }
+
+    jmethodID methodId;
+    if (!err) {
+        methodId = (*jniEnv)->GetStaticMethodID(jniEnv, jcls,
+                "main", "([Ljava/lang/String;)V");
+        if (methodId == NULL) {
+            wprintf(L"Cannot find the main() method.\n");
+            err = true;
+        }
+    }
+
+    jclass stringClass;
+    if (!err) {
+        stringClass = (*jniEnv)->FindClass(jniEnv, "java/lang/String");
+        if(stringClass == NULL) {
+            wprintf(L"Could not find String class\n");
+            err = true;
+        }
+    }
+
+    if (!err) {
+        // Create the run args
+        int argc = duk_get_length(ctx, 1);
+        jobjectArray args = (*jniEnv)->NewObjectArray(jniEnv, argc, stringClass, NULL);
+        for(int i = 0; i < argc; i++) {
+            duk_get_prop_index(ctx, 1, i);
+            const char* val = duk_safe_to_string(ctx, -1);
+            duk_pop(ctx);
+            (*jniEnv)->SetObjectArrayElement(jniEnv, args, i, (*jniEnv)->NewStringUTF(jniEnv, val));
+        }
+
+        (*jniEnv)->CallStaticVoidMethod(jniEnv, jcls, methodId, args);
+        if ((*jniEnv)->ExceptionCheck(jniEnv)) {
+            (*jniEnv)->ExceptionDescribe(jniEnv);
+            (*jniEnv)->ExceptionClear(jniEnv);
+        }
+    }
+
+    return 0;
+}
+
 static duk_ret_t native_jvm(duk_context *ctx)
 {
     bool err = false;
 
     duk_get_prop_string(ctx, 0, "jvmDLL");
     const char* dll = duk_safe_to_string(ctx, -1);
-    duk_pop(ctx);
-
-    duk_get_prop_string(ctx, 0, "mainClass");
-    const char* class = duk_safe_to_string(ctx, -1);
     duk_pop(ctx);
 
     wchar_t* wdll = toUTF16(dll);
@@ -605,59 +659,6 @@ static duk_ret_t native_jvm(duk_context *ctx)
         free(jvmopt);
     }
 
-    jclass jcls;
-    if (!err) {
-        char* classSlashes = strdup(class);
-        replaceChar(classSlashes, '.' , '/');
-        jcls = (*jniEnv)->FindClass(jniEnv, classSlashes);
-        if (jcls == NULL) {
-            (*jniEnv)->ExceptionDescribe(jniEnv);
-            err = true;
-        }
-        free(classSlashes);
-    }
-
-    jmethodID methodId;
-    if (!err) {
-        methodId = (*jniEnv)->GetStaticMethodID(jniEnv, jcls,
-                "main", "([Ljava/lang/String;)V");
-        if (methodId == NULL) {
-            wprintf(L"Cannot find the main() method.\n");
-            err = true;
-        }
-    }
-
-    jclass stringClass;
-    if (!err) {
-        stringClass = (*jniEnv)->FindClass(jniEnv, "java/lang/String");
-        if(stringClass == NULL) {
-            wprintf(L"Could not find String class\n");
-            err = true;
-        }
-    }
-
-    if (!err) {
-        // Create the run args
-        duk_get_prop_string(ctx, 0, "args");
-        int argc = duk_get_length(ctx, -1);
-        jobjectArray args = (*jniEnv)->NewObjectArray(jniEnv, argc, stringClass, NULL);
-        for(int i = 0; i < argc; i++) {
-            duk_get_prop_index(ctx, -1, i);
-            const char* val = duk_safe_to_string(ctx, -1);
-            duk_pop(ctx);
-            (*jniEnv)->SetObjectArrayElement(jniEnv, args, i, (*jniEnv)->NewStringUTF(jniEnv, val));
-        }
-
-        (*jniEnv)->CallStaticVoidMethod(jniEnv, jcls, methodId, args);
-        if ((*jniEnv)->ExceptionCheck(jniEnv)) {
-            (*jniEnv)->ExceptionDescribe(jniEnv);
-            (*jniEnv)->ExceptionClear(jniEnv);
-        }
-    }
-
-    if (javaVM)
-        (*javaVM)->DestroyJavaVM(javaVM);
-
     free(wdll);
 
     return 0;
@@ -703,6 +704,9 @@ static int executeJS(char* js, char* executable)
 
         duk_push_c_function(ctx, native_jvm, 1);
         duk_put_prop_string(ctx, -2, "loadJVM");
+
+        duk_push_c_function(ctx, native_javaCallMain, 2);
+        duk_put_prop_string(ctx, -2, "javaCallMain");
 
         duk_push_c_function(ctx, native_java_service, 1);
         duk_put_prop_string(ctx, -2, "javaService");
@@ -935,6 +939,9 @@ int wmain(int argc, wchar_t **argv)
     free(javaScript);
 
     //wprintf(L"Done");
+
+    if (javaVM)
+        (*javaVM)->DestroyJavaVM(javaVM);
 
 #else
     wchar_t* target = 0;

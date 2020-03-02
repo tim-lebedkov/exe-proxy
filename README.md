@@ -59,8 +59,9 @@ the executable and the extension .js and executes it using the Duktape library
      - options.jvmDLL - path to the jvm.dll
 	 - options.jvmOptions - JVM options (the same as arguments for java.exe) as an array of strings
 		See https://docs.oracle.com/javase/7/docs/technotes/guides/jni/spec/invocation.html for more details.
-	 - options.mainClass - name of the main class
-	 - options.args - argument for "public static void main(String[])" as an array of strings
+  - process.javaCallMain(className, args) - 		
+	 - className - name of the main class
+	 - args - argument for "public static void main(String[])" as an array of strings
   - process.javaService(options) - execute Java program as a Windows service
 	 
 
@@ -78,9 +79,9 @@ for (var i = 0; i < process.argv.length; i++) {
 process.loadJVM({
 	jvmDLL: "C:\\Program Files (x86)\\Java\\jre7\\bin\\client\\jvm.dll", 
 	jvmOptions: ["-Djava.class.path=C:\\Users\\IEUser\\Documents\\exe-proxy"],
-	mainClass: "tests.Demo",
-	args: ["first", "second"]
 });
+
+process.javaCallMain("tests.Demo", ["first", "second"]);
 
 process.javaService({serviceName: "MySVC"});
 
