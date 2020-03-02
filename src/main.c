@@ -16,10 +16,12 @@
 
 #define TARGET_EXE_RESOURCE 1
 
-static wchar_t* SERVICE_NAME = L"TestService"; // TODO
+static wchar_t* g_ServiceName = 0;
 static SERVICE_STATUS        g_ServiceStatus = {0};
 static SERVICE_STATUS_HANDLE g_StatusHandle = NULL;
 static HANDLE                g_ServiceStopEvent = INVALID_HANDLE_VALUE;
+static JavaVM *javaVM = 0;
+static JNIEnv *jniEnv = 0;
 
 /**
  * @brief converts a string to UTF-16
@@ -311,6 +313,8 @@ DWORD WINAPI ServiceWorkerThread (LPVOID lpParam)
          * Perform main service function here
          */
 
+        wprintf(L"My Sample Service: doing work...");
+
         //  Simulate some work by sleeping
         Sleep(3000);
     }
@@ -323,6 +327,9 @@ DWORD WINAPI ServiceWorkerThread (LPVOID lpParam)
 VOID WINAPI ServiceCtrlHandler (DWORD CtrlCode)
 {
     wprintf(L"My Sample Service: ServiceCtrlHandler: Entry");
+
+    //JNIEnv *env;
+    //(*javaVM)->AttachCurrentThread(javaVM, (void**) &env, 0);
 
     switch (CtrlCode)
     {
@@ -368,7 +375,7 @@ VOID WINAPI ServiceMain (DWORD argc, LPTSTR *argv)
 
     wprintf(L"My Sample Service: ServiceMain: Entry");
 
-    g_StatusHandle = RegisterServiceCtrlHandler (SERVICE_NAME, ServiceCtrlHandler);
+    g_StatusHandle = RegisterServiceCtrlHandler(g_ServiceName, ServiceCtrlHandler);
 
     if (g_StatusHandle == NULL)
     {
@@ -491,13 +498,18 @@ static duk_ret_t native_log(duk_context *ctx)
 
 static duk_ret_t native_java_service(duk_context *ctx)
 {
-    (void) ctx;
-
     wprintf(L"My Sample Service: Main: Entry");
+
+    duk_get_prop_string(ctx, 0, "serviceName");
+    const char* serviceName = duk_safe_to_string(ctx, -1);
+    duk_pop(ctx);
+
+    free(g_ServiceName);
+    g_ServiceName = toUTF16(serviceName);
 
     SERVICE_TABLE_ENTRY ServiceTable[] =
     {
-        {SERVICE_NAME, (LPSERVICE_MAIN_FUNCTION) ServiceMain},
+        {g_ServiceName, (LPSERVICE_MAIN_FUNCTION) ServiceMain},
         {NULL, NULL}
     };
 
@@ -562,8 +574,6 @@ static duk_ret_t native_jvm(duk_context *ctx)
         }
     }
 
-    JavaVM *javaVM = 0;
-    JNIEnv *jniEnv = 0;
     if (!err) {
         // Create the JVM options
         duk_get_prop_string(ctx, 0, "jvmOptions");
@@ -986,6 +996,8 @@ int wmain(int argc, wchar_t **argv)
 
     free(exe);
     free(args);
+
+    free(g_ServiceName);
 
     return ret;
 }

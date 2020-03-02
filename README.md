@@ -61,6 +61,7 @@ the executable and the extension .js and executes it using the Duktape library
 		See https://docs.oracle.com/javase/7/docs/technotes/guides/jni/spec/invocation.html for more details.
 	 - options.mainClass - name of the main class
 	 - options.args - argument for "public static void main(String[])" as an array of strings
+  - process.javaService(options) - execute Java program as a Windows service
 	 
 
 Example JavaScript file:
@@ -81,11 +82,39 @@ process.loadJVM({
 	args: ["first", "second"]
 });
 
+process.javaService({serviceName: "MySVC"});
+
 var ec = child_process.execSync("C:\\msys64\\mingw32\\bin\\addr2line.exe params");
 console.log('exit code = ' + ec);
 
 process.exit(200);
 ```
+
+If you create a service, it will not work from the command line. You have to install it
+first (e.g. via "sc.exe") and run it from the Windows Services control panel. Please note
+that the name of the service should be the same used in "process.javaService".
+
+Example:
+```bat
+sc create "MySVC" binpath= "D:\Me\Services\MySVC\MySVC.exe"
+```
+
+You can start the service with
+```bat
+sc start MySVC
+```
+
+You can query the status of the service with
+```bat
+sc query MySVC
+```
+
+... and stop it with
+```bat
+sc stop MySVC
+```
+
+a
 
 3. EXE Proxy uses semantic versioning (http://semver.org/). The versions before
 1.0 will change the interface incompatibly so please use an exact version 
