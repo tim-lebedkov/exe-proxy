@@ -103,8 +103,13 @@ static WINBOOL CALLBACK enumResources(HMODULE hModule, LPCWSTR lpType, LPWSTR lp
     return TRUE;
 }
 
-static void printError(DWORD err) {
-    wprintf(L"Error %d\n", err);
+/**
+ * @brief prints an error message
+ * @param msg message, e.g. "failed to start the target process"
+ * @param err error code returned by GetLastError()
+ */
+static void printError(const wchar_t* msg, DWORD err) {
+    wprintf(L"Error %d: %ls\n", err, msg);
 }
 
 /**
@@ -128,7 +133,7 @@ static void copyResources(HANDLE hUpdateRes, LPCWSTR lpszSourceFile, bool copyIc
 
     DWORD err = GetLastError();
     if (err) {
-        printError(err);
+        printError(L"failed to load the executable as a resource", err);
     }
 
     if (hSrcExe != NULL) {
@@ -514,8 +519,7 @@ static duk_ret_t native_java_service(duk_context *ctx)
     };
 
     if (StartServiceCtrlDispatcher (ServiceTable) == FALSE) {
-       wprintf(L"My Sample Service: Main: StartServiceCtrlDispatcher returned error");
-       printError(GetLastError());
+       printError(L"failed to start the service control dispatcher", GetLastError());
     }
 
     wprintf(L"My Sample Service: Main: Exit");
@@ -559,8 +563,7 @@ static duk_ret_t native_jvm(duk_context *ctx)
 
     HMODULE m = LoadLibrary(wdll);
     if (m == NULL) {
-        wprintf(L"Error loading the JVM DLL\n");
-        printError(GetLastError());
+        printError(L"failed to load the JVM DLL", GetLastError());
         err = true;
     }
 
@@ -569,8 +572,7 @@ static duk_ret_t native_jvm(duk_context *ctx)
     if (!err) {
         createJavaVM = (JNI_createJavaVM) GetProcAddress(m, "JNI_CreateJavaVM");
         if (createJavaVM == NULL) {
-            wprintf(L"Error finding the procedure JNI_CreateJavaVM in the DLL\n");
-            printError(GetLastError());
+            printError(L"failed to find the procedure JNI_CreateJavaVM in the DLL", GetLastError());
         }
     }
 
@@ -787,14 +789,14 @@ static int readJS(wchar_t* filename, char** js)
             FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (f == INVALID_HANDLE_VALUE) {
         err = 1;
-        printError(GetLastError());
+        printError(L"failed accessing the JavaScript file", GetLastError());
     }
 
     LARGE_INTEGER sz;
     if (!err) {
         if (!GetFileSizeEx(f, &sz)) {
             err = 1;
-            printError(GetLastError());
+            printError(L"failed getting the size of the JavaScript file", GetLastError());
         }
     }
 
@@ -811,7 +813,7 @@ static int readJS(wchar_t* filename, char** js)
         DWORD read;
         if (!ReadFile(f, *js, sz.LowPart, &read, NULL)) {
             err = 1;
-            printError(GetLastError());
+            printError(L"failed reading the JavaScript file", GetLastError());
         } else {
             *(*js + read) = 0;
         }
