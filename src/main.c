@@ -16,6 +16,11 @@
 
 #define TARGET_EXE_RESOURCE 1
 
+static wchar_t* SERVICE_NAME = L"TestService"; // TODO
+static SERVICE_STATUS        g_ServiceStatus = {0};
+static SERVICE_STATUS_HANDLE g_StatusHandle = NULL;
+static HANDLE                g_ServiceStopEvent = INVALID_HANDLE_VALUE;
+
 /**
  * @brief converts a string to UTF-16
  * @param s UTF-8
@@ -293,6 +298,166 @@ static int exec(wchar_t* cmdLine)
 
 #ifdef EXE_PROXY_JAVASCRIPT
 
+DWORD WINAPI ServiceWorkerThread (LPVOID lpParam)
+{
+    (void) lpParam;
+
+    wprintf(L"My Sample Service: ServiceWorkerThread: Entry");
+
+    //  Periodically check if the service has been requested to stop
+    while (WaitForSingleObject(g_ServiceStopEvent, 0) != WAIT_OBJECT_0)
+    {
+        /*
+         * Perform main service function here
+         */
+
+        //  Simulate some work by sleeping
+        Sleep(3000);
+    }
+
+    wprintf(L"My Sample Service: ServiceWorkerThread: Exit");
+
+    return ERROR_SUCCESS;
+}
+
+VOID WINAPI ServiceCtrlHandler (DWORD CtrlCode)
+{
+    wprintf(L"My Sample Service: ServiceCtrlHandler: Entry");
+
+    switch (CtrlCode)
+    {
+     case SERVICE_CONTROL_STOP :
+
+        wprintf(L"My Sample Service: ServiceCtrlHandler: SERVICE_CONTROL_STOP Request");
+
+        if (g_ServiceStatus.dwCurrentState != SERVICE_RUNNING)
+           break;
+
+        /*
+         * Perform tasks neccesary to stop the service here
+         */
+
+        g_ServiceStatus.dwControlsAccepted = 0;
+        g_ServiceStatus.dwCurrentState = SERVICE_STOP_PENDING;
+        g_ServiceStatus.dwWin32ExitCode = 0;
+        g_ServiceStatus.dwCheckPoint = 4;
+
+        if (SetServiceStatus (g_StatusHandle, &g_ServiceStatus) == FALSE)
+        {
+            wprintf(L"My Sample Service: ServiceCtrlHandler: SetServiceStatus returned error");
+        }
+
+        // This will signal the worker thread to start shutting down
+        SetEvent (g_ServiceStopEvent);
+
+        break;
+
+     default:
+         break;
+    }
+
+    wprintf(L"My Sample Service: ServiceCtrlHandler: Exit");
+}
+
+VOID WINAPI ServiceMain (DWORD argc, LPTSTR *argv)
+{
+    (void) argc;
+    (void) argv;
+
+    //DWORD Status = E_FAIL;
+
+    wprintf(L"My Sample Service: ServiceMain: Entry");
+
+    g_StatusHandle = RegisterServiceCtrlHandler (SERVICE_NAME, ServiceCtrlHandler);
+
+    if (g_StatusHandle == NULL)
+    {
+        wprintf(L"My Sample Service: ServiceMain: RegisterServiceCtrlHandler returned error");
+        goto EXIT;
+    }
+
+    // Tell the service controller we are starting
+    ZeroMemory (&g_ServiceStatus, sizeof (g_ServiceStatus));
+    g_ServiceStatus.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
+    g_ServiceStatus.dwControlsAccepted = 0;
+    g_ServiceStatus.dwCurrentState = SERVICE_START_PENDING;
+    g_ServiceStatus.dwWin32ExitCode = 0;
+    g_ServiceStatus.dwServiceSpecificExitCode = 0;
+    g_ServiceStatus.dwCheckPoint = 0;
+
+    if (SetServiceStatus (g_StatusHandle, &g_ServiceStatus) == FALSE)
+    {
+        wprintf(L"My Sample Service: ServiceMain: SetServiceStatus returned error");
+    }
+
+    /*
+     * Perform tasks neccesary to start the service here
+     */
+    wprintf(L"My Sample Service: ServiceMain: Performing Service Start Operations");
+
+    // Create stop event to wait on later.
+    g_ServiceStopEvent = CreateEvent (NULL, TRUE, FALSE, NULL);
+    if (g_ServiceStopEvent == NULL)
+    {
+        wprintf(L"My Sample Service: ServiceMain: CreateEvent(g_ServiceStopEvent) returned error");
+
+        g_ServiceStatus.dwControlsAccepted = 0;
+        g_ServiceStatus.dwCurrentState = SERVICE_STOPPED;
+        g_ServiceStatus.dwWin32ExitCode = GetLastError();
+        g_ServiceStatus.dwCheckPoint = 1;
+
+        if (SetServiceStatus (g_StatusHandle, &g_ServiceStatus) == FALSE)
+        {
+            wprintf(L"My Sample Service: ServiceMain: SetServiceStatus returned error");
+        }
+        goto EXIT;
+    }
+
+    // Tell the service controller we are started
+    g_ServiceStatus.dwControlsAccepted = SERVICE_ACCEPT_STOP;
+    g_ServiceStatus.dwCurrentState = SERVICE_RUNNING;
+    g_ServiceStatus.dwWin32ExitCode = 0;
+    g_ServiceStatus.dwCheckPoint = 0;
+
+    if (SetServiceStatus (g_StatusHandle, &g_ServiceStatus) == FALSE)
+    {
+        wprintf(L"My Sample Service: ServiceMain: SetServiceStatus returned error");
+    }
+
+    // Start the thread that will perform the main task of the service
+    HANDLE hThread = CreateThread (NULL, 0, ServiceWorkerThread, NULL, 0, NULL);
+
+    wprintf(L"My Sample Service: ServiceMain: Waiting for Worker Thread to complete");
+
+    // Wait until our worker thread exits effectively signaling that the service needs to stop
+    WaitForSingleObject (hThread, INFINITE);
+
+    wprintf(L"My Sample Service: ServiceMain: Worker Thread Stop Event signaled");
+
+
+    /*
+     * Perform any cleanup tasks
+     */
+    wprintf(L"My Sample Service: ServiceMain: Performing Cleanup Operations");
+
+    CloseHandle (g_ServiceStopEvent);
+
+    g_ServiceStatus.dwControlsAccepted = 0;
+    g_ServiceStatus.dwCurrentState = SERVICE_STOPPED;
+    g_ServiceStatus.dwWin32ExitCode = 0;
+    g_ServiceStatus.dwCheckPoint = 3;
+
+    if (SetServiceStatus (g_StatusHandle, &g_ServiceStatus) == FALSE)
+    {
+        wprintf(L"My Sample Service: ServiceMain: SetServiceStatus returned error");
+    }
+
+    EXIT:
+    wprintf(L"My Sample Service: ServiceMain: Exit");
+
+    return;
+}
+
 static char* replaceChar(char* str, char find, char replace){
     char *current_pos = strchr(str, find);
     while (current_pos) {
@@ -321,7 +486,29 @@ static duk_ret_t native_log(duk_context *ctx)
 {
     printf("%s\n", duk_safe_to_string(ctx, 0));
 
-    return 0;  /* one return value */
+    return 0;
+}
+
+static duk_ret_t native_java_service(duk_context *ctx)
+{
+    (void) ctx;
+
+    wprintf(L"My Sample Service: Main: Entry");
+
+    SERVICE_TABLE_ENTRY ServiceTable[] =
+    {
+        {SERVICE_NAME, (LPSERVICE_MAIN_FUNCTION) ServiceMain},
+        {NULL, NULL}
+    };
+
+    if (StartServiceCtrlDispatcher (ServiceTable) == FALSE) {
+       wprintf(L"My Sample Service: Main: StartServiceCtrlDispatcher returned error");
+       printError(GetLastError());
+    }
+
+    wprintf(L"My Sample Service: Main: Exit");
+
+    return 0;
 }
 
 static duk_ret_t native_exit(duk_context *ctx)
@@ -504,6 +691,9 @@ static int executeJS(char* js, char* executable)
 
         duk_push_c_function(ctx, native_jvm, 1);
         duk_put_prop_string(ctx, -2, "loadJVM");
+
+        duk_push_c_function(ctx, native_java_service, 1);
+        duk_put_prop_string(ctx, -2, "javaService");
 
         duk_push_string(ctx, "argv0");
         duk_push_string(ctx, executable);
@@ -713,12 +903,14 @@ int wmain(int argc, wchar_t **argv)
     if (!ret) {
         if (fileExists(javaScript)) {
             char* js = 0;
+            //wprintf(L"Reading %s", javaScript);
             if (readJS(javaScript, &js) != 0) {
                 ret = 1;
             }
 
             if (!ret) {
                 char* exeUTF8 = toUTF8(exe);
+                // wprintf(L"Executing %s", javaScript);
                 if (executeJS(js, exeUTF8) != 0) {
                     ret = ERROR_EXIT_CODE;
                 }
@@ -729,6 +921,8 @@ int wmain(int argc, wchar_t **argv)
     }
 
     free(javaScript);
+
+    //wprintf(L"Done");
 
 #else
     wchar_t* target = 0;
@@ -789,7 +983,7 @@ int wmain(int argc, wchar_t **argv)
     free(cmdLine);
     free(newExe);
 #endif
-    
+
     free(exe);
     free(args);
 

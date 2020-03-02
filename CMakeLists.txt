@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.7 FATAL_ERROR)
 
 project(exeproxy C)
 
-set(CMAKE_ALLOW_LOOSE_LOOP_CONSTRUCTS ON) 
+set(CMAKE_ALLOW_LOOSE_LOOP_CONSTRUCTS ON)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/../cmake/")
 SET(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -mconsole -static -municode")
 SET(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Map,${PROJECT_NAME}.map")
@@ -31,7 +31,6 @@ include(CheckCXXCompilerFlag)
 include(Common.cmake)
 
 if(MINGW)
-  add_definitions(-D_WIN32_WINNT=0x0600)
   if(NOT NPACKD_PLATFORM_X64)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=i686")
   endif ()
@@ -92,6 +91,8 @@ set(EXEPROXY_HEADERS
 set(OUTPUT_FILE_NAME "exeproxy.exe")
 
 add_executable(exeproxy ${EXEPROXY_SOURCES})
+
+set_property(TARGET exeproxy PROPERTY C_STANDARD 11)
 
 target_link_libraries(exeproxy shell32)
 target_include_directories(exeproxy PRIVATE "C:/Program Files/JDK_64_bit/include" "C:/Program Files/JDK_64_bit/include/win32")
