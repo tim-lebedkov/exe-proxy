@@ -2,6 +2,12 @@ cmake_minimum_required(VERSION 3.7 FATAL_ERROR)
 
 project(exeproxy C)
 
+option(WITH_JAVASCRIPT "Build with JavaScript support" ON)
+
+if(WITH_JAVASCRIPT)
+  add_definitions(-DWITH_JAVASCRIPT)
+endif()
+
 set(CMAKE_ALLOW_LOOSE_LOOP_CONSTRUCTS ON)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/../cmake/")
 SET(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -mconsole -static -municode")

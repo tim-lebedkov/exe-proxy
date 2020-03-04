@@ -1,6 +1,4 @@
 // should the JavaScript be supported?
-#define EXE_PROXY_JAVASCRIPT 1
-
 #include <stdio.h>
 #include <windows.h>
 #include <string.h>
@@ -8,7 +6,7 @@
 #include <shellapi.h>
 #include <jni.h>
 
-#ifdef EXE_PROXY_JAVASCRIPT
+#ifdef WITH_JAVASCRIPT
 #include "duktape.h"
 #endif
 
@@ -325,7 +323,7 @@ static int exec(wchar_t* cmdLine)
     return ret;
 }
 
-#ifdef EXE_PROXY_JAVASCRIPT
+#ifdef WITH_JAVASCRIPT
 
 static char* replaceChar(char* str, char find, char replace){
     char *current_pos = strchr(str, find);
@@ -724,7 +722,7 @@ int wmain(int argc, wchar_t **argv)
         }
     }
 
-#ifdef EXE_PROXY_JAVASCRIPT
+#ifdef WITH_JAVASCRIPT
     // find the name of the .js file
     wchar_t* javaScript = 0;
     if (!ret) {
@@ -824,7 +822,7 @@ int wmain(int argc, wchar_t **argv)
     }
 
     if (!ret) {
-        ret = exec(newExe, cmdLine);
+        ret = exec(cmdLine);
     }
 
     free(cmdLine);
