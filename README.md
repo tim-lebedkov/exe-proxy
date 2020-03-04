@@ -5,20 +5,25 @@ are two versions of the program available:
  - simple (20 KB binary)
  - with JavaScript (270 KB binary)
 
+EXE Proxy uses semantic versioning (http://semver.org/). The versions before
+1.0 will change the interface incompatibly so please use an exact version 
+number as dependency.
+
 Usage scenarios:
  - enable access to a command line program under another (possibly shorter) name. 
  - store many copies of EXE proxy in one directory pointing to command line 
-	utilities on the computer and
-	adding only this directory to the PATH environment variable. This would avoid 
-	reaching the maximum length for PATH (2048 characters) and making it very
-	complicated while still be able to run all programs without specifying the 
-	directory where they reside. 
+    utilities on the computer and
+    adding only this directory to the PATH environment variable. This would avoid 
+    reaching the maximum length for PATH (2048 characters) and making it very
+    complicated while still be able to run all programs without specifying the 
+    directory where they reside. 
  - make a GUI executable usable from the command line too. 
-	Normally cmd.exe does not wait for
-	GUI executables to end but returns immediately. EXE Proxy does not differentiate
-	between GUI and non-GUI programs and always waits for the target process to end. 
+    Normally cmd.exe does not wait for
+    GUI executables to end but returns immediately. EXE Proxy does not differentiate
+    between GUI and non-GUI programs and always waits for the target process to end. 
  - launcher for Java or other programming languages that do not create executables
-	by default.
+    by default.
+ - writing Windows service in Java   
 
 1. The simple version passes all arguments as-is to the target program. 
 The return code of the target program will be returned as exit code by EXE Proxy.
@@ -47,24 +52,33 @@ making the executable icon look exactly as in the target executable.
 
 If the parameter --copy-version is present, the version information is copied.
 
-2. The version with JavaScript reads the JavaScript file the same name as
+2. The second version reads the JavaScript from the file with the same name as
 the executable and the extension .js and executes it using the Duktape library
-(https://duktape.org/). In the JavaScript code are also defined:
+(https://duktape.org/). 
+
+You can still use the "exeproxy-copy" command from 
+above to embedd the icons and version information from the target executable, 
+but it is not executed automatically (if not specified in the JavaScript).
+
+You can create a Java based Windows service using JNA. See
+https://github.com/java-native-access/jna/tree/master/contrib/ntservice for
+more details. The Windows command line utility "sc.exe" can be used to register
+and unregister the service.
+
+In the JavaScript code are also defined:
   - os.totalmem() - total physical system memory in bytes
   - process.argv - executable parameters as an array of strings. The value at the index 0 is the name of the executable used on the command line.
   - process.argv0 - executable name including path
   - child_process.execSync(command) - executes a program and returns the exit code
   - process.exit(ec) - exits the program with the specified exit code  
-  - process.loadJVM(options) - execute "public static void main(String[])" in the specified class
+  - process.loadJVM(options) - start Java Virtual Machine in the current process
      - options.jvmDLL - path to the jvm.dll
-	 - options.jvmOptions - JVM options (the same as arguments for java.exe) as an array of strings
-		See https://docs.oracle.com/javase/7/docs/technotes/guides/jni/spec/invocation.html for more details.
-  - process.javaCallMain(className, args) - 		
-	 - className - name of the main class
-	 - args - argument for "public static void main(String[])" as an array of strings
-  - process.javaService(options) - execute Java program as a Windows service
-	 
-
+     - options.jvmOptions - JVM options (the same as arguments for java.exe) as an array of strings
+        See https://docs.oracle.com/javase/7/docs/technotes/guides/jni/spec/invocation.html for more details.
+  - process.javaCallMain(className, args) - execute "main" method in the specified Java class. The JVM must be loaded first.
+     - className - name of the main class
+     - args - argument for "public static void main(String[])" as an array of strings
+ 
 Example JavaScript file:
 
 ```JavaScript
@@ -73,12 +87,12 @@ console.log('exe = ' + process.argv0);
 
 console.log(process.argv.length);
 for (var i = 0; i < process.argv.length; i++) {
-	console.log("JS argument " + i + " = " + process.argv[i]);
+    console.log("JS argument " + i + " = " + process.argv[i]);
 }
 
 process.loadJVM({
-	jvmDLL: "C:\\Program Files (x86)\\Java\\jre7\\bin\\client\\jvm.dll", 
-	jvmOptions: ["-Djava.class.path=C:\\Users\\IEUser\\Documents\\exe-proxy"],
+    jvmDLL: "C:\\Program Files (x86)\\Java\\jre7\\bin\\client\\jvm.dll", 
+    jvmOptions: ["-Djava.class.path=C:\\Users\\IEUser\\Documents\\exe-proxy"],
 });
 
 process.javaCallMain("tests.Demo", ["first", "second"]);
@@ -91,33 +105,4 @@ console.log('exit code = ' + ec);
 process.exit(200);
 ```
 
-If you create a service, it will not work from the command line. You have to install it
-first (e.g. via "sc.exe") and run it from the Windows Services control panel. Please note
-that the name of the service should be the same used in "process.javaService".
-
-Example:
-```bat
-sc create "MySVC" binpath= "D:\Me\Services\MySVC\MySVC.exe"
-```
-
-You can start the service with
-```bat
-sc start MySVC
-```
-
-You can query the status of the service with
-```bat
-sc query MySVC
-```
-
-... and stop it with
-```bat
-sc stop MySVC
-```
-
-a
-
-3. EXE Proxy uses semantic versioning (http://semver.org/). The versions before
-1.0 will change the interface incompatibly so please use an exact version 
-number as dependency.
 

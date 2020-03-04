@@ -16,10 +16,6 @@
 
 #define TARGET_EXE_RESOURCE 1
 
-static wchar_t* g_ServiceName = 0;
-static SERVICE_STATUS        g_ServiceStatus = {0};
-static SERVICE_STATUS_HANDLE g_StatusHandle = NULL;
-static HANDLE                g_ServiceStopEvent = INVALID_HANDLE_VALUE;
 static JavaVM *javaVM = 0;
 static JNIEnv *jniEnv = 0;
 
@@ -48,14 +44,14 @@ static wchar_t* getExePath()
 {
     // get our executable name
     DWORD sz = MAX_PATH;
-    LPTSTR exe = malloc(sz * sizeof(TCHAR));
-    if (GetModuleFileName(0, exe, sz) == sz) {
-        free(exe);
-        sz = MAX_PATH * 10;
+    LPTSTR exe;
+    while (true) {
         exe = malloc(sz * sizeof(TCHAR));
-        if (GetModuleFileName(0, exe, sz) == sz) {
-            exe = 0;
-        }
+        if (GetModuleFileName(0, exe, sz) != sz)
+            break;
+
+        free(exe);
+        sz = sz * 2;
     }
 
     return exe;
@@ -108,8 +104,8 @@ static WINBOOL CALLBACK enumResources(HMODULE hModule, LPCWSTR lpType, LPWSTR lp
  * @param msg message, e.g. "failed to start the target process"
  * @param err error code returned by GetLastError()
  */
-static void printError(const wchar_t* msg, DWORD err) {
-    wprintf(L"Error %d: %ls\n", err, msg);
+static void printError(const char* msg, DWORD err) {
+    wprintf(L"Error %d: %s\n", err, msg);
 }
 
 /**
@@ -133,7 +129,7 @@ static void copyResources(HANDLE hUpdateRes, LPCWSTR lpszSourceFile, bool copyIc
 
     DWORD err = GetLastError();
     if (err) {
-        printError(L"failed to load the executable as a resource", err);
+        printError("failed to load the executable as a resource", err);
     }
 
     if (hSrcExe != NULL) {
@@ -210,7 +206,7 @@ static int copyExe(wchar_t* exeProxy, wchar_t* target, bool copyIcon,
                 buf,
                 bufSize)) {
             ret = ERROR_EXIT_CODE;
-            wprintf(L"UpdateResource failed\n");
+            printError("UpdateResource failed", GetLastError());
         }
     }
 
@@ -221,8 +217,7 @@ static int copyExe(wchar_t* exeProxy, wchar_t* target, bool copyIcon,
     if (!ret) {
         if (!EndUpdateResource(hUpdateRes, FALSE)) {
             ret = ERROR_EXIT_CODE;
-            wprintf(L"EndUpdateResource failed with the error code %d\n",
-                    GetLastError());
+            printError("EndUpdateResource failed", GetLastError());
         }
     }
 
@@ -305,171 +300,6 @@ static int exec(wchar_t* cmdLine)
 
 #ifdef EXE_PROXY_JAVASCRIPT
 
-DWORD WINAPI ServiceWorkerThread (LPVOID lpParam)
-{
-    (void) lpParam;
-
-    wprintf(L"My Sample Service: ServiceWorkerThread: Entry");
-
-    //  Periodically check if the service has been requested to stop
-    while (WaitForSingleObject(g_ServiceStopEvent, 0) != WAIT_OBJECT_0)
-    {
-        /*
-         * Perform main service function here
-         */
-
-        wprintf(L"My Sample Service: doing work...");
-
-        //  Simulate some work by sleeping
-        Sleep(3000);
-    }
-
-    wprintf(L"My Sample Service: ServiceWorkerThread: Exit");
-
-    return ERROR_SUCCESS;
-}
-
-VOID WINAPI ServiceCtrlHandler (DWORD CtrlCode)
-{
-    wprintf(L"My Sample Service: ServiceCtrlHandler: Entry");
-
-    //JNIEnv *env;
-    //(*javaVM)->AttachCurrentThread(javaVM, (void**) &env, 0);
-
-    switch (CtrlCode)
-    {
-     case SERVICE_CONTROL_STOP :
-
-        wprintf(L"My Sample Service: ServiceCtrlHandler: SERVICE_CONTROL_STOP Request");
-
-        if (g_ServiceStatus.dwCurrentState != SERVICE_RUNNING)
-           break;
-
-        /*
-         * Perform tasks neccesary to stop the service here
-         */
-
-        g_ServiceStatus.dwControlsAccepted = 0;
-        g_ServiceStatus.dwCurrentState = SERVICE_STOP_PENDING;
-        g_ServiceStatus.dwWin32ExitCode = 0;
-        g_ServiceStatus.dwCheckPoint = 4;
-
-        if (SetServiceStatus (g_StatusHandle, &g_ServiceStatus) == FALSE)
-        {
-            wprintf(L"My Sample Service: ServiceCtrlHandler: SetServiceStatus returned error");
-        }
-
-        // This will signal the worker thread to start shutting down
-        SetEvent (g_ServiceStopEvent);
-
-        break;
-
-     default:
-         break;
-    }
-
-    wprintf(L"My Sample Service: ServiceCtrlHandler: Exit");
-}
-
-VOID WINAPI ServiceMain (DWORD argc, LPTSTR *argv)
-{
-    (void) argc;
-    (void) argv;
-
-    //DWORD Status = E_FAIL;
-
-    wprintf(L"My Sample Service: ServiceMain: Entry");
-
-    g_StatusHandle = RegisterServiceCtrlHandler(g_ServiceName, ServiceCtrlHandler);
-
-    if (g_StatusHandle == NULL)
-    {
-        wprintf(L"My Sample Service: ServiceMain: RegisterServiceCtrlHandler returned error");
-        goto EXIT;
-    }
-
-    // Tell the service controller we are starting
-    ZeroMemory (&g_ServiceStatus, sizeof (g_ServiceStatus));
-    g_ServiceStatus.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
-    g_ServiceStatus.dwControlsAccepted = 0;
-    g_ServiceStatus.dwCurrentState = SERVICE_START_PENDING;
-    g_ServiceStatus.dwWin32ExitCode = 0;
-    g_ServiceStatus.dwServiceSpecificExitCode = 0;
-    g_ServiceStatus.dwCheckPoint = 0;
-
-    if (SetServiceStatus (g_StatusHandle, &g_ServiceStatus) == FALSE)
-    {
-        wprintf(L"My Sample Service: ServiceMain: SetServiceStatus returned error");
-    }
-
-    /*
-     * Perform tasks neccesary to start the service here
-     */
-    wprintf(L"My Sample Service: ServiceMain: Performing Service Start Operations");
-
-    // Create stop event to wait on later.
-    g_ServiceStopEvent = CreateEvent (NULL, TRUE, FALSE, NULL);
-    if (g_ServiceStopEvent == NULL)
-    {
-        wprintf(L"My Sample Service: ServiceMain: CreateEvent(g_ServiceStopEvent) returned error");
-
-        g_ServiceStatus.dwControlsAccepted = 0;
-        g_ServiceStatus.dwCurrentState = SERVICE_STOPPED;
-        g_ServiceStatus.dwWin32ExitCode = GetLastError();
-        g_ServiceStatus.dwCheckPoint = 1;
-
-        if (SetServiceStatus (g_StatusHandle, &g_ServiceStatus) == FALSE)
-        {
-            wprintf(L"My Sample Service: ServiceMain: SetServiceStatus returned error");
-        }
-        goto EXIT;
-    }
-
-    // Tell the service controller we are started
-    g_ServiceStatus.dwControlsAccepted = SERVICE_ACCEPT_STOP;
-    g_ServiceStatus.dwCurrentState = SERVICE_RUNNING;
-    g_ServiceStatus.dwWin32ExitCode = 0;
-    g_ServiceStatus.dwCheckPoint = 0;
-
-    if (SetServiceStatus (g_StatusHandle, &g_ServiceStatus) == FALSE)
-    {
-        wprintf(L"My Sample Service: ServiceMain: SetServiceStatus returned error");
-    }
-
-    // Start the thread that will perform the main task of the service
-    HANDLE hThread = CreateThread (NULL, 0, ServiceWorkerThread, NULL, 0, NULL);
-
-    wprintf(L"My Sample Service: ServiceMain: Waiting for Worker Thread to complete");
-
-    // Wait until our worker thread exits effectively signaling that the service needs to stop
-    WaitForSingleObject (hThread, INFINITE);
-
-    wprintf(L"My Sample Service: ServiceMain: Worker Thread Stop Event signaled");
-
-
-    /*
-     * Perform any cleanup tasks
-     */
-    wprintf(L"My Sample Service: ServiceMain: Performing Cleanup Operations");
-
-    CloseHandle (g_ServiceStopEvent);
-
-    g_ServiceStatus.dwControlsAccepted = 0;
-    g_ServiceStatus.dwCurrentState = SERVICE_STOPPED;
-    g_ServiceStatus.dwWin32ExitCode = 0;
-    g_ServiceStatus.dwCheckPoint = 3;
-
-    if (SetServiceStatus (g_StatusHandle, &g_ServiceStatus) == FALSE)
-    {
-        wprintf(L"My Sample Service: ServiceMain: SetServiceStatus returned error");
-    }
-
-    EXIT:
-    wprintf(L"My Sample Service: ServiceMain: Exit");
-
-    return;
-}
-
 static char* replaceChar(char* str, char find, char replace){
     char *current_pos = strchr(str, find);
     while (current_pos) {
@@ -497,32 +327,6 @@ static duk_ret_t native_execSync(duk_context *ctx)
 static duk_ret_t native_log(duk_context *ctx)
 {
     printf("%s\n", duk_safe_to_string(ctx, 0));
-
-    return 0;
-}
-
-static duk_ret_t native_java_service(duk_context *ctx)
-{
-    wprintf(L"My Sample Service: Main: Entry");
-
-    duk_get_prop_string(ctx, 0, "serviceName");
-    const char* serviceName = duk_safe_to_string(ctx, -1);
-    duk_pop(ctx);
-
-    free(g_ServiceName);
-    g_ServiceName = toUTF16(serviceName);
-
-    SERVICE_TABLE_ENTRY ServiceTable[] =
-    {
-        {g_ServiceName, (LPSERVICE_MAIN_FUNCTION) ServiceMain},
-        {NULL, NULL}
-    };
-
-    if (StartServiceCtrlDispatcher (ServiceTable) == FALSE) {
-       printError(L"failed to start the service control dispatcher", GetLastError());
-    }
-
-    wprintf(L"My Sample Service: Main: Exit");
 
     return 0;
 }
@@ -617,7 +421,7 @@ static duk_ret_t native_jvm(duk_context *ctx)
 
     HMODULE m = LoadLibrary(wdll);
     if (m == NULL) {
-        printError(L"failed to load the JVM DLL", GetLastError());
+        printError("failed to load the JVM DLL", GetLastError());
         err = true;
     }
 
@@ -626,7 +430,7 @@ static duk_ret_t native_jvm(duk_context *ctx)
     if (!err) {
         createJavaVM = (JNI_createJavaVM) GetProcAddress(m, "JNI_CreateJavaVM");
         if (createJavaVM == NULL) {
-            printError(L"failed to find the procedure JNI_CreateJavaVM in the DLL", GetLastError());
+            printError("failed to find the procedure JNI_CreateJavaVM in the DLL", GetLastError());
         }
     }
 
@@ -707,9 +511,6 @@ static int executeJS(char* js, char* executable)
 
         duk_push_c_function(ctx, native_javaCallMain, 2);
         duk_put_prop_string(ctx, -2, "javaCallMain");
-
-        duk_push_c_function(ctx, native_java_service, 1);
-        duk_put_prop_string(ctx, -2, "javaService");
 
         duk_push_string(ctx, "argv0");
         duk_push_string(ctx, executable);
@@ -793,14 +594,14 @@ static int readJS(wchar_t* filename, char** js)
             FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (f == INVALID_HANDLE_VALUE) {
         err = 1;
-        printError(L"failed accessing the JavaScript file", GetLastError());
+        printError("failed accessing the JavaScript file", GetLastError());
     }
 
     LARGE_INTEGER sz;
     if (!err) {
         if (!GetFileSizeEx(f, &sz)) {
             err = 1;
-            printError(L"failed getting the size of the JavaScript file", GetLastError());
+            printError("failed getting the size of the JavaScript file", GetLastError());
         }
     }
 
@@ -817,7 +618,7 @@ static int readJS(wchar_t* filename, char** js)
         DWORD read;
         if (!ReadFile(f, *js, sz.LowPart, &read, NULL)) {
             err = 1;
-            printError(L"failed reading the JavaScript file", GetLastError());
+            printError("failed reading the JavaScript file", GetLastError());
         } else {
             *(*js + read) = 0;
         }
@@ -1005,8 +806,6 @@ int wmain(int argc, wchar_t **argv)
 
     free(exe);
     free(args);
-
-    free(g_ServiceName);
 
     return ret;
 }
