@@ -42,8 +42,32 @@ static wchar_t* toUTF16(const char* s)
  * @param err error code returned by GetLastError()
  */
 static void printError(const char* msg, DWORD err) {
-    wprintf(L"Error %d: %s\n", err, msg);
+    HLOCAL pBuffer;
+    DWORD n;
+
+    /*if (err >= INTERNET_ERROR_BASE && err <= INTERNET_ERROR_LAST) {
+        // wininet.dll-errors
+        n = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER |
+                       FORMAT_MESSAGE_FROM_HMODULE,
+                       GetModuleHandle(L"wininet.dll"),
+                       err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                       (LPTSTR)&pBuffer, 0, nullptr);
+    } else */{
+        n = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER |
+                       FORMAT_MESSAGE_FROM_SYSTEM,
+                       NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                       (LPTSTR)&pBuffer, 0, NULL);
+    }
+    wchar_t* wmsg = toUTF16(msg);
+    if (n == 0)
+        wprintf(L"Error %d: %ls\n", err, wmsg);
+    else {
+        wprintf(L"Error %d: %ls: %ls\n", err, wmsg, pBuffer);
+        LocalFree(pBuffer);
+    }
+    free(wmsg);
 }
+
 
 /**
  * @brief full path to the current exe file
