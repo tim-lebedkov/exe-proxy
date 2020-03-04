@@ -193,7 +193,7 @@ static int copyExe(wchar_t* exeProxy, wchar_t* target, bool copyIcon,
     wchar_t* exe = getExePath();
     if (!exe) {
         ret = ERROR_EXIT_CODE;
-        wprintf(L"Cannot determine the name of this executable\n");
+        printf("Cannot determine the name of this executable\n");
     }
 
     if (!ret) {
@@ -635,7 +635,7 @@ static int readJS(wchar_t* filename, char** js)
     if (!err) {
         if (sz.HighPart > 0 || sz.LowPart > 100 * 1024 * 1024) {
             err = 1;
-            wprintf(L"JavaScript file is too big\n");
+            printf("JavaScript file is too big\n");
         }
     }
 
@@ -697,7 +697,7 @@ int wmain(int argc, wchar_t **argv)
     wchar_t* exe = getExePath();
     if (!exe) {
         ret = ERROR_EXIT_CODE;
-        wprintf(L"Cannot determine the name of this executable\n");
+        printf("Cannot determine the name of this executable\n");
     }
 
     // extract parameters
@@ -740,7 +740,7 @@ int wmain(int argc, wchar_t **argv)
             *p = 0;
         } else {
             ret = ERROR_EXIT_CODE;
-            wprintf(L"Program name does not end with .exe\n");
+            printf("Program name does not end with .exe\n");
         }
     }
 
@@ -779,7 +779,7 @@ int wmain(int argc, wchar_t **argv)
         if (LoadString(0, (TARGET_EXE_RESOURCE - 1) * 16 + 1,
                 target, MAX_PATH) == 0) {
             ret = ERROR_EXIT_CODE;
-            wprintf(L"Cannot load the target executable path from the resource\n");
+            printf("Cannot load the target executable path from the resource\n");
         }
     }
 
