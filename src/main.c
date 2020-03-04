@@ -37,6 +37,15 @@ static wchar_t* toUTF16(const char* s)
 }
 
 /**
+ * @brief prints an error message
+ * @param msg message, e.g. "failed to start the target process"
+ * @param err error code returned by GetLastError()
+ */
+static void printError(const char* msg, DWORD err) {
+    wprintf(L"Error %d: %s\n", err, msg);
+}
+
+/**
  * @brief full path to the current exe file
  * @return path that must be freed later or 0 if an error occures
  */
@@ -88,24 +97,17 @@ static WINBOOL CALLBACK enumResources(HMODULE hModule, LPCWSTR lpType, LPWSTR lp
     if (lpResLock) {
         //wprintf(L"Updating the icon resource\n");
 
-        UpdateResource(data->hUpdateRes,
+        if (!UpdateResource(data->hUpdateRes,
                 lpType,
                 lpName,
                 MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US),
                 lpResLock,
-                SizeofResource(hModule, hRes));
+                SizeofResource(hModule, hRes))) {
+            printError("failed to update the resource", GetLastError());
+        }
     }
 
     return TRUE;
-}
-
-/**
- * @brief prints an error message
- * @param msg message, e.g. "failed to start the target process"
- * @param err error code returned by GetLastError()
- */
-static void printError(const char* msg, DWORD err) {
-    wprintf(L"Error %d: %s\n", err, msg);
 }
 
 /**
@@ -173,7 +175,7 @@ static int copyExe(wchar_t* exeProxy, wchar_t* target, bool copyIcon,
     if (!ret) {
         if (!CopyFile(exe, exeProxy, TRUE)) {
             ret = ERROR_EXIT_CODE;
-            wprintf(L"Copying the executable failed\n");
+            printError("Copying the executable failed", GetLastError());
         }
     }
 
@@ -184,7 +186,7 @@ static int copyExe(wchar_t* exeProxy, wchar_t* target, bool copyIcon,
         hUpdateRes = BeginUpdateResource(exeProxy, TRUE);
         if (!hUpdateRes) {
             ret = ERROR_EXIT_CODE;
-            wprintf(L"BeginUpdateResource failed\n");
+            printError("BeginUpdateResource failed", GetLastError());
         }
     }
 
@@ -228,7 +230,7 @@ PROCESS_INFORMATION pinfo;
 
 static BOOL WINAPI ctrlHandler(DWORD fdwCtrlType)
 {
-    wprintf(L"ctrlHandler\n");
+    //wprintf(L"ctrlHandler\n");
     switch (fdwCtrlType) {
         case CTRL_C_EVENT:
             GenerateConsoleCtrlEvent(CTRL_C_EVENT, pinfo.dwProcessId);
@@ -289,6 +291,7 @@ static int exec(wchar_t* cmdLine)
         CloseHandle(pinfo.hThread);
         CloseHandle(pinfo.hProcess);
     } else {
+        printError("error starting the target program", GetLastError());
         wprintf(L"Error starting %ls\n", cmdLine);
         ret = ERROR_EXIT_CODE;
     }
@@ -374,7 +377,7 @@ static duk_ret_t native_javaCallMain(duk_context* ctx)
         methodId = (*jniEnv)->GetStaticMethodID(jniEnv, jcls,
                 "main", "([Ljava/lang/String;)V");
         if (methodId == NULL) {
-            wprintf(L"Cannot find the main() method.\n");
+            printf("Cannot find the main() method.\n");
             err = true;
         }
     }
@@ -383,7 +386,7 @@ static duk_ret_t native_javaCallMain(duk_context* ctx)
     if (!err) {
         stringClass = (*jniEnv)->FindClass(jniEnv, "java/lang/String");
         if(stringClass == NULL) {
-            wprintf(L"Could not find String class\n");
+            printf("Could not find String class\n");
             err = true;
         }
     }
@@ -456,7 +459,7 @@ static duk_ret_t native_jvm(duk_context *ctx)
         // Create the JVM
         long flag = createJavaVM(&javaVM, &jniEnv, &vmArgs);
         if (flag == JNI_ERR) {
-            wprintf(L"Error creating VM.\n");
+            printf("Error creating VM.\n");
             err = true;
         }
 
