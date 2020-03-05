@@ -99,8 +99,6 @@ process.loadJVM({
 
 process.javaCallMain("tests.Demo", ["first", "second"]);
 
-process.javaService({serviceName: "MySVC"});
-
 var ec = child_process.execSync("C:\\msys64\\mingw32\\bin\\addr2line.exe params");
 console.log('exit code = ' + ec);
 
