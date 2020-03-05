@@ -26,18 +26,3 @@ rem MSYS2 repositories are currently not available
 rem C:\msys64\usr\bin\pacman -Syu --noconfirm 
 rem C:\msys64\usr\bin\pacman -Syu --noconfirm 
 
-if %bits% equ 64 goto bits64
-
-C:\msys64\usr\bin\pacman -S --noconfirm mingw-w64-i686-libtool
-if %errorlevel% neq 0 exit /b %errorlevel%
-
-goto :eof
-
-:bits64
-C:\msys64\usr\bin\pacman -S --noconfirm mingw-w64-x86_64-libtool
-if %errorlevel% neq 0 exit /b %errorlevel%
-
-if "%prg%" neq "npackd" goto end
-
-:end
-

@@ -11,19 +11,10 @@ set version=%APPVEYOR_BUILD_VERSION:~0,-4%
 
 SET NPACKD_CL=C:\Program Files\NpackdCL
 
-if %bits% equ 64 goto bits64
-
 set mingw_libs=i686-w64-mingw32
 set mingw=C:\msys64\mingw32
 
-goto start
-
-:bits64
-
-set mingw_libs=x86_64-w64-mingw32
 set mingw=C:\msys64\mingw64
-
-goto start
 
 mkdir exe-proxy\build
 if %errorlevel% neq 0 exit /b %errorlevel%
