@@ -14,8 +14,10 @@
 
 #define TARGET_EXE_RESOURCE 1
 
+#ifdef WITH_JAVASCRIPT
 static JavaVM *javaVM = 0;
 static JNIEnv *jniEnv = 0;
+#endif
 
 /**
  * @brief converts a string to UTF-16
