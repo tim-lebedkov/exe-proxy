@@ -35,10 +35,10 @@ without slashes or backslashes. In the latter case the target executable should
 reside in the same directory as the EXE Proxy itself.
 
 In order to change the target executable resource entry you could start the EXE
-Proxy with the parameter "exe-proxy-copy":
+Proxy with the parameter "exeproxy-copy":
 
 ```bat
-exeproxy.exe exeproxy-copy <output file name> <target executable name> [--copy-icons] [--copy-version]
+exeproxy.exe exeproxy-copy <output file name> <target executable name> [--copy-icons] [--copy-version] [--copy-manifest]
 ```
 
 The second parameter should be the name of the output exe file where a copy of
@@ -51,6 +51,8 @@ If the parameter --copy-icons is present, all icons and icon groups are copied
 making the executable icon look exactly as in the target executable.
 
 If the parameter --copy-version is present, the version information is copied.
+
+If the parameter --copy-manifest is present, the application XML manifest is copied.
 
 2. The second version reads the JavaScript from the file with the same name as
 the executable and the extension .js and executes it using the Duktape library
