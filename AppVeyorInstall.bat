@@ -14,7 +14,7 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 "%npackd_cl%\ncl" detect
 if %errorlevel% neq 0 exit /b %errorlevel%
 
-"%npackd_cl%\ncl" set-install-dir -f "C:\Program Files (x86)"
+"%npackd_cl%\ncl" set-install-dir -f "C:\Program Files"
 if %errorlevel% neq 0 exit /b %errorlevel%
 
 rem Python will be detected, but needs NpackdCL
