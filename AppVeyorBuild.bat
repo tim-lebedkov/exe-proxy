@@ -40,7 +40,7 @@ copy c:\Builds\exe-proxy-64-minsizerel\exeproxy.exe exeproxy64.exe
 if %errorlevel% neq 0 exit /b %errorlevel%
 copy "C:\projects\exe-proxy\README.md" .
 if %errorlevel% neq 0 exit /b %errorlevel%
-copy "C:\projects\exe-proxy\LICENSE.md" .
+copy "C:\projects\exe-proxy\LICENSE.txt" .
 if %errorlevel% neq 0 exit /b %errorlevel%
 mkdir C:\Artifacts
 if %errorlevel% neq 0 exit /b %errorlevel%
