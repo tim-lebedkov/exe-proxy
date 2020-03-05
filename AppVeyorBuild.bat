@@ -31,7 +31,23 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 
 set path=%initial_path%
 
-appveyor PushArtifact exeproxy\build\exeproxy%bits%-%version%.zip
+set where=c:\release
+mkdir %where%
+cd %where%
+copy c:\Builds\exe-proxy-32-minsizerel\exeproxy.exe exeproxy.exe
+if %errorlevel% neq 0 exit /b %errorlevel%
+copy c:\Builds\exe-proxy-64-minsizerel\exeproxy.exe exeproxy64.exe
+if %errorlevel% neq 0 exit /b %errorlevel%
+copy "%initial_path%\README.md" .
+if %errorlevel% neq 0 exit /b %errorlevel%
+copy "%initial_path%\LICENSE.md" .
+if %errorlevel% neq 0 exit /b %errorlevel%
+mkdir C:\Artifacts
+if %errorlevel% neq 0 exit /b %errorlevel%
+7z a C:\Artifacts\exeproxy-%version%.zip * -mx9	
+if %errorlevel% neq 0 exit /b %errorlevel%
+
+appveyor PushArtifact C:\Artifacts\exeproxy-%version%.zip
 if %errorlevel% neq 0 exit /b %errorlevel%
 
 

@@ -21,7 +21,7 @@ rem Python will be detected, but needs NpackdCL
 "%npackd_cl%\ncl" add -p com.googlecode.windows-package-manager.NpackdCL
 if %errorlevel% neq 0 exit /b %errorlevel%
 
-"%npackd_cl%\ncl" add -p com.oracle.JDK64
+"%npackd_cl%\ncl" add -p com.oracle.JDK64 -p org.7-zip.SevenZIP -r [9,20)
 if %errorlevel% neq 0 exit /b %errorlevel%
 
 rem update all packages to the newest versions
