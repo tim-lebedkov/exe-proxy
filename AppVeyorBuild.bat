@@ -72,10 +72,10 @@ copy "C:\projects\exe-proxy\LICENSE.txt" .
 if %errorlevel% neq 0 exit /b %errorlevel%
 mkdir C:\Artifacts
 if %errorlevel% neq 0 exit /b %errorlevel%
+set path=%initial_path%
 7z a C:\Artifacts\exeproxy-%version%.zip * -mx9	
 if %errorlevel% neq 0 exit /b %errorlevel%
 
-set path=%initial_path%
 appveyor PushArtifact C:\Artifacts\exeproxy-%version%.zip
 if %errorlevel% neq 0 exit /b %errorlevel%
 
